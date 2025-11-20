@@ -1,0 +1,16 @@
+downloader:
+  rpc_url: "https://mainnet.infura.io/v3/XXXX"
+  start_block: 17000000          # where to start backfill
+  chunk_size: 5000               # block range per eth_getLogs call
+  finality: "finalized"          # "finalized", "safe", or "latest"
+  db:
+    path: "./data/downloader.sqlite"
+
+indexers:
+  - name: "MyTokenIndexer"
+    db_path: "./data/mytokenindexer.sqlite"
+    contracts:
+      - address: "0x1234567890abcdef1234567890abcdef12345678"
+        events:
+          - "Transfer(address,address,uint256)"
+          - "Approval(address,address,uint256)"
