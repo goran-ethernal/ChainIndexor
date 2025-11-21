@@ -5,10 +5,25 @@ downloader:
   finality: "finalized"          # "finalized", "safe", or "latest"
   db:
     path: "./data/downloader.sqlite"
+    journal_mode: "WAL"
+    synchronous: "NORMAL"
+    busy_timeout: 5000
+    cache_size: 10000
+    max_open_connections: 25
+    max_idle_connections: 5
+    enable_foreign_keys: true
 
 indexers:
   - name: "MyTokenIndexer"
-    db_path: "./data/mytokenindexer.sqlite"
+    db:
+      path: "./data/mytokenindexer.sqlite"
+      journal_mode: "WAL"
+      synchronous: "NORMAL"
+      busy_timeout: 5000
+      cache_size: 10000
+      max_open_connections: 25
+      max_idle_connections: 5
+      enable_foreign_keys: true
     contracts:
       - address: "0x1234567890abcdef1234567890abcdef12345678"
         events:
