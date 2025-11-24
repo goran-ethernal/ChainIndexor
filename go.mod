@@ -7,6 +7,7 @@ require (
 	github.com/ethereum/go-ethereum v1.16.7
 	github.com/mattn/go-sqlite3 v1.14.32
 	github.com/rubenv/sql-migrate v1.8.0
+	github.com/russross/meddler v1.0.1
 	github.com/stretchr/testify v1.10.0
 	go.uber.org/zap v1.27.1
 	gopkg.in/yaml.v3 v3.0.1
