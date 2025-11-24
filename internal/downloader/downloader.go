@@ -190,12 +190,14 @@ func (d *Downloader) Download(ctx context.Context) error {
 		// Fetch next chunk
 		result, err := d.logFetcher.FetchNext(ctx, lastBlock)
 		if err != nil {
-			d.log.Errorw("failed to fetch logs", "error", err, "last_block", lastBlock)
-
 			// Check if this is a reorg error
-			if isReorgError(err) {
-				d.log.Warn("reorg detected, initiating rollback")
-				if err := d.handleReorg(lastBlock); err != nil {
+			var reorgErr *reorg.ErrReorgDetected
+			if errors.As(err, &reorgErr) {
+				d.log.Warnw("reorg detected, initiating rollback",
+					"block", reorgErr.FirstReorgBlock,
+					"details", reorgErr.Details,
+				)
+				if err := d.handleReorg(reorgErr.FirstReorgBlock); err != nil {
 					return fmt.Errorf("failed to handle reorg: %w", err)
 				}
 				// Continue from rolled-back position
@@ -207,6 +209,8 @@ func (d *Downloader) Download(ctx context.Context) error {
 				continue
 			}
 
+			// Not a reorg error, it's a real failure
+			d.log.Errorw("failed to fetch logs", "error", err, "last_block", lastBlock)
 			return fmt.Errorf("failed to fetch logs: %w", err)
 		}
 
@@ -249,26 +253,16 @@ func (d *Downloader) Download(ctx context.Context) error {
 
 // handleReorg handles a blockchain reorganization by rolling back indexers
 // and adjusting the sync state.
-func (d *Downloader) handleReorg(currentBlock uint64) error {
-	d.log.Warnw("handling reorg", "current_block", currentBlock)
-
-	// For now, roll back to a safe point (e.g., 100 blocks before current)
-	// In a production system, you'd use the ReorgDetector to find the exact fork point
-	rollbackTo := currentBlock
-	if rollbackTo > 100 {
-		rollbackTo -= 100
-	} else {
-		rollbackTo = 0
-	}
-
-	d.log.Warnw("rolling back to safe block", "rollback_to", rollbackTo)
+func (d *Downloader) handleReorg(firstReorgBlock uint64) error {
+	d.log.Warnw("handling reorg", "first_reorg_block", firstReorgBlock)
 
 	// Notify all indexers to roll back
-	if err := d.coordinator.HandleReorg(rollbackTo); err != nil {
+	if err := d.coordinator.HandleReorg(firstReorgBlock); err != nil {
 		return fmt.Errorf("failed to notify indexers of reorg: %w", err)
 	}
 
 	// Reset sync state to rollback point
+	rollbackTo := firstReorgBlock - 1
 	if err := d.syncManager.Reset(rollbackTo); err != nil {
 		return fmt.Errorf("failed to reset sync state: %w", err)
 	}
@@ -283,34 +277,6 @@ func (d *Downloader) handleReorg(currentBlock uint64) error {
 	d.log.Infow("reorg handled, resuming from safe block", "block", rollbackTo)
 
 	return nil
-}
-
-// isReorgError checks if an error is related to a blockchain reorganization.
-func isReorgError(err error) bool {
-	// Check for reorg-related error messages
-	if err == nil {
-		return false
-	}
-	errMsg := err.Error()
-	return contains(errMsg, "reorg detected") ||
-		contains(errMsg, "chain discontinuity") ||
-		contains(errMsg, "reorganization")
-}
-
-// contains checks if a string contains a substring (case-insensitive helper).
-func contains(s, substr string) bool {
-	return len(s) >= len(substr) && (s == substr || len(substr) == 0 ||
-		(len(s) > 0 && len(substr) > 0 && indexOf(s, substr) >= 0))
-}
-
-// indexOf returns the index of substr in s, or -1 if not found.
-func indexOf(s, substr string) int {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return i
-		}
-	}
-	return -1
 }
 
 // Close closes the downloader and releases resources.
