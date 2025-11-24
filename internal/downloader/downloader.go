@@ -226,7 +226,7 @@ func (d *Downloader) Download(ctx context.Context) error {
 		// Save checkpoint with the last block's hash
 		// Use the hash of the last block in the range
 		lastHeader := result.Headers[len(result.Headers)-1]
-		blockHash := lastHeader.Hash().Hex()
+		blockHash := lastHeader.Hash()
 
 		if err := d.syncManager.SaveCheckpoint(
 			result.ToBlock,
@@ -240,7 +240,7 @@ func (d *Downloader) Download(ctx context.Context) error {
 
 		d.log.Infow("checkpoint saved",
 			"block", lastBlock,
-			"block_hash", blockHash,
+			"block_hash", blockHash.Hex(),
 			"mode", d.logFetcher.GetMode(),
 			"logs_processed", len(result.Logs),
 		)

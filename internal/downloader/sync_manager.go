@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/goran-ethernal/ChainIndexor/internal/db"
 	"github.com/goran-ethernal/ChainIndexor/internal/downloader/migrations"
 	"github.com/goran-ethernal/ChainIndexor/internal/logger"
@@ -20,11 +21,11 @@ type SyncManager struct {
 // SyncState represents the current synchronization state.
 // Uses meddler tags for automatic struct-to-db mapping.
 type SyncState struct {
-	ID                   int    `meddler:"id,pk" json:"-"`
-	LastIndexedBlock     uint64 `meddler:"last_indexed_block" json:"last_indexed_block"`
-	LastIndexedBlockHash string `meddler:"last_indexed_block_hash" json:"last_indexed_block_hash"`
-	LastIndexedTimestamp int64  `meddler:"last_indexed_timestamp" json:"last_indexed_timestamp"`
-	Mode                 string `meddler:"mode" json:"mode"`
+	ID                   int         `meddler:"id,pk" json:"-"`
+	LastIndexedBlock     uint64      `meddler:"last_indexed_block" json:"last_indexed_block"`
+	LastIndexedBlockHash common.Hash `meddler:"last_indexed_block_hash,hash" json:"last_indexed_block_hash"`
+	LastIndexedTimestamp int64       `meddler:"last_indexed_timestamp" json:"last_indexed_timestamp"`
+	Mode                 string      `meddler:"mode" json:"mode"`
 }
 
 // GetMode returns the Mode as a FetchMode type.
@@ -91,7 +92,7 @@ func (sm *SyncManager) GetState() (*SyncState, error) {
 }
 
 // SaveCheckpoint saves a checkpoint with the given block number, hash, and mode.
-func (sm *SyncManager) SaveCheckpoint(blockNum uint64, blockHash string, mode FetchMode) error {
+func (sm *SyncManager) SaveCheckpoint(blockNum uint64, blockHash common.Hash, mode FetchMode) error {
 	state := SyncState{
 		ID:                   1,
 		LastIndexedBlock:     blockNum,
@@ -107,7 +108,7 @@ func (sm *SyncManager) SaveCheckpoint(blockNum uint64, blockHash string, mode Fe
 
 	sm.log.Debugw("saved checkpoint",
 		"block", blockNum,
-		"block_hash", blockHash,
+		"block_hash", blockHash.Hex(),
 		"mode", mode,
 		"timestamp", state.LastIndexedTimestamp,
 	)
@@ -142,7 +143,7 @@ func (sm *SyncManager) Reset(startBlock uint64) error {
 	state := SyncState{
 		ID:                   1,
 		LastIndexedBlock:     startBlock,
-		LastIndexedBlockHash: "",
+		LastIndexedBlockHash: common.Hash{},
 		LastIndexedTimestamp: time.Now().Unix(),
 		Mode:                 string(ModeBackfill),
 	}

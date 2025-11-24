@@ -4,6 +4,7 @@ import (
 	"os"
 	"testing"
 
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/goran-ethernal/ChainIndexor/internal/logger"
 	"github.com/stretchr/testify/require"
 )
@@ -33,7 +34,7 @@ func TestSyncManager(t *testing.T) {
 	require.Equal(t, uint64(0), lastBlock)
 
 	// Test SaveCheckpoint
-	testHash := "0xabc123"
+	testHash := common.HexToHash("0xabc123")
 	err = sm.SaveCheckpoint(100, testHash, ModeBackfill)
 	require.NoError(t, err)
 
@@ -49,7 +50,7 @@ func TestSyncManager(t *testing.T) {
 	require.Greater(t, state.LastIndexedTimestamp, int64(0))
 
 	// Test mode change
-	testHash2 := "0xdef456"
+	testHash2 := common.HexToHash("0xdef456")
 	err = sm.SaveCheckpoint(200, testHash2, ModeLive)
 	require.NoError(t, err)
 
@@ -76,7 +77,7 @@ func TestSyncManager(t *testing.T) {
 	state, err = sm.GetState()
 	require.NoError(t, err)
 	require.Equal(t, uint64(50), state.LastIndexedBlock)
-	require.Equal(t, "", state.LastIndexedBlockHash) // Hash cleared on reset
+	require.Equal(t, common.Hash{}, state.LastIndexedBlockHash) // Hash cleared on reset
 	require.Equal(t, ModeBackfill, state.GetMode())
 }
 
@@ -92,7 +93,7 @@ func TestSyncManagerPersistence(t *testing.T) {
 	sm, err := NewSyncManager(tmpDB, log)
 	require.NoError(t, err)
 
-	persistHash := "0x123abc"
+	persistHash := common.HexToHash("0x123abc")
 	err = sm.SaveCheckpoint(500, persistHash, ModeLive)
 	require.NoError(t, err)
 	sm.Close()

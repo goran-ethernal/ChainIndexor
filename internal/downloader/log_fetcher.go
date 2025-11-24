@@ -87,21 +87,21 @@ func (lf *LogFetcher) FetchRange(ctx context.Context, fromBlock, toBlock uint64)
 		return nil, fmt.Errorf("failed to fetch logs: %w", err)
 	}
 
-	// Generate block numbers for the full range (needed for reorg detection)
+	// Verify consistency and record blocks
+	// The reorg detector will fetch headers itself and verify everything
+	if err := lf.reorgDetector.VerifyAndRecordBlocks(ctx, logs, fromBlock, toBlock); err != nil {
+		return nil, fmt.Errorf("reorg detected: %w", err)
+	}
+
+	// Fetch block headers for the result (after reorg verification passed)
 	blockNumbers := make([]uint64, 0, toBlock-fromBlock+1)
 	for blockNum := fromBlock; blockNum <= toBlock; blockNum++ {
 		blockNumbers = append(blockNumbers, blockNum)
 	}
 
-	// Fetch block headers
 	headers, err := lf.rpc.BatchGetBlockHeaders(ctx, blockNumbers)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch headers: %w", err)
-	}
-
-	// Verify consistency and record blocks
-	if err := lf.reorgDetector.VerifyAndRecordBlocks(logs, headers); err != nil {
-		return nil, fmt.Errorf("reorg detected: %w", err)
 	}
 
 	lf.log.Infow("fetched range",
@@ -142,12 +142,8 @@ func (lf *LogFetcher) fetchBackfill(ctx context.Context, lastIndexedBlock uint64
 	}
 
 	fromBlock := lastIndexedBlock + 1
-	toBlock := fromBlock + lf.cfg.ChunkSize - 1
-
 	// Don't fetch beyond finalized block
-	if toBlock > finalizedBlock {
-		toBlock = finalizedBlock
-	}
+	toBlock := min(fromBlock+lf.cfg.ChunkSize-1, finalizedBlock)
 
 	// Check if we've caught up
 	if fromBlock > finalizedBlock {
