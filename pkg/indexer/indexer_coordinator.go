@@ -8,12 +8,15 @@ import (
 	"github.com/ethereum/go-ethereum/core/types"
 )
 
-// IndexerCoordinator manages multiple indexers and routes events to them based on topics.
+// IndexerCoordinator manages multiple indexers and routes events to them based on address and topics.
 type IndexerCoordinator struct {
 	mu sync.RWMutex
 
-	// topicToIndexers maps event topics to the indexers that are interested in them
-	topicToIndexers map[common.Hash][]Indexer
+	// addressTopics maps address -> topic -> indexers for specific topic filters
+	addressTopics map[common.Address]map[common.Hash][]Indexer
+
+	// addressAllTopics maps address -> indexers that want ALL topics from that address
+	addressAllTopics map[common.Address][]Indexer
 
 	// indexers holds all registered indexers
 	indexers []Indexer
@@ -22,28 +25,38 @@ type IndexerCoordinator struct {
 // NewIndexerCoordinator creates a new IndexerCoordinator.
 func NewIndexerCoordinator() *IndexerCoordinator {
 	return &IndexerCoordinator{
-		topicToIndexers: make(map[common.Hash][]Indexer),
-		indexers:        make([]Indexer, 0),
+		indexers:         make([]Indexer, 0),
+		addressTopics:    make(map[common.Address]map[common.Hash][]Indexer),
+		addressAllTopics: make(map[common.Address][]Indexer),
 	}
 }
 
-// RegisterIndexer registers a new indexer and associates it with the given topics.
-// The indexer will receive logs that match any of the specified topics.
-func (ic *IndexerCoordinator) RegisterIndexer(indexer Indexer, topics []common.Hash) {
+// RegisterIndexer registers a new indexer.
+func (ic *IndexerCoordinator) RegisterIndexer(indexer Indexer) {
 	ic.mu.Lock()
 	defer ic.mu.Unlock()
 
-	// Add to the list of all indexers
-	ic.indexers = append(ic.indexers, indexer)
-
-	// Map topics to this indexer
-	for _, topic := range topics {
-		ic.topicToIndexers[topic] = append(ic.topicToIndexers[topic], indexer)
+	addressTopics := indexer.EventsToIndex()
+	for addr, topics := range addressTopics {
+		if len(topics) == 0 {
+			// Empty topic set means indexer wants ALL events from this address
+			ic.addressAllTopics[addr] = append(ic.addressAllTopics[addr], indexer)
+		} else {
+			// Specific topics - build routing map
+			if _, exists := ic.addressTopics[addr]; !exists {
+				ic.addressTopics[addr] = make(map[common.Hash][]Indexer)
+			}
+			for topic := range topics {
+				ic.addressTopics[addr][topic] = append(ic.addressTopics[addr][topic], indexer)
+			}
+		}
 	}
+
+	ic.indexers = append(ic.indexers, indexer)
 }
 
 // HandleLogs processes a batch of logs and routes them to the appropriate indexers.
-// Each log is sent to all indexers that registered interest in its topic.
+// Each log is sent to indexers that registered interest in both its address AND topic.
 func (ic *IndexerCoordinator) HandleLogs(logs []types.Log) error {
 	ic.mu.RLock()
 	defer ic.mu.RUnlock()
@@ -52,18 +65,31 @@ func (ic *IndexerCoordinator) HandleLogs(logs []types.Log) error {
 	indexerLogs := make(map[Indexer][]types.Log)
 
 	for _, log := range logs {
-		if len(log.Topics) == 0 {
-			continue
+		// Collect all indexers interested in this log
+		interestedIndexers := make(map[Indexer]struct{})
+
+		// Check indexers that want ALL topics from this address
+		if indexers, exists := ic.addressAllTopics[log.Address]; exists {
+			for _, idx := range indexers {
+				interestedIndexers[idx] = struct{}{}
+			}
 		}
 
-		// The first topic is the event signature
-		eventTopic := log.Topics[0]
-
-		// Find all indexers interested in this topic
-		if indexers, ok := ic.topicToIndexers[eventTopic]; ok {
-			for _, indexer := range indexers {
-				indexerLogs[indexer] = append(indexerLogs[indexer], log)
+		// Check indexers that want specific topics from this address
+		if len(log.Topics) > 0 {
+			if topicsToIndexer, addrExists := ic.addressTopics[log.Address]; addrExists {
+				eventTopic := log.Topics[0] // first topic is the event signature
+				if indexers, topicExists := topicsToIndexer[eventTopic]; topicExists {
+					for _, idx := range indexers {
+						interestedIndexers[idx] = struct{}{}
+					}
+				}
 			}
+		}
+
+		// Add this log to all interested indexers
+		for idx := range interestedIndexers {
+			indexerLogs[idx] = append(indexerLogs[idx], log)
 		}
 	}
 

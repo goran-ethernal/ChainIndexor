@@ -10,7 +10,8 @@ import (
 type Indexer interface {
 	// EventsToIndex returns a map of contract addresses to their event topic hashes.
 	// This is used by the coordinator to determine which logs should be sent to this indexer.
-	EventsToIndex() map[common.Address][]common.Hash
+	// The inner map is a set (using struct{} as values) of topic hashes for each address.
+	EventsToIndex() map[common.Address]map[common.Hash]struct{}
 
 	// HandleLogs processes a batch of logs received from the downloader.
 	// Implementations should decode and persist the relevant events.

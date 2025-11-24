@@ -55,6 +55,11 @@ func (c *Client) GetFinalizedBlockHeader(ctx context.Context) (*types.Header, er
 	return c.eth.HeaderByNumber(ctx, big.NewInt(int64(rpc.FinalizedBlockNumber)))
 }
 
+// GetSafeBlockHeader retrieves the safe block header.
+func (c *Client) GetSafeBlockHeader(ctx context.Context) (*types.Header, error) {
+	return c.eth.HeaderByNumber(ctx, big.NewInt(int64(rpc.SafeBlockNumber)))
+}
+
 // BatchGetLogs retrieves logs for multiple filter queries in a single batch call.
 func (c *Client) BatchGetLogs(ctx context.Context, queries []ethereum.FilterQuery) ([][]types.Log, error) {
 	batch := make([]rpc.BatchElem, len(queries))
