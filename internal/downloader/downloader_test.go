@@ -1,6 +1,7 @@
 package downloader
 
 import (
+	"errors"
 	"fmt"
 	"testing"
 
@@ -9,6 +10,7 @@ import (
 	"github.com/goran-ethernal/ChainIndexor/internal/logger"
 	"github.com/goran-ethernal/ChainIndexor/pkg/config"
 	"github.com/goran-ethernal/ChainIndexor/pkg/indexer"
+	"github.com/goran-ethernal/ChainIndexor/pkg/reorg"
 	"github.com/stretchr/testify/require"
 )
 
@@ -147,17 +149,12 @@ func TestReorgErrorDetection(t *testing.T) {
 		},
 		{
 			name:    "reorg detected error",
-			err:     fmt.Errorf("reorg detected at block 100"),
+			err:     &reorg.ErrReorgDetected{FirstReorgBlock: 100, Details: "test"},
 			isReorg: true,
 		},
 		{
-			name:    "chain discontinuity error",
-			err:     fmt.Errorf("chain discontinuity detected"),
-			isReorg: true,
-		},
-		{
-			name:    "reorganization error",
-			err:     fmt.Errorf("blockchain reorganization occurred"),
+			name:    "wrapped reorg error",
+			err:     fmt.Errorf("fetch failed: %w", &reorg.ErrReorgDetected{FirstReorgBlock: 200, Details: "wrapped"}),
 			isReorg: true,
 		},
 		{
@@ -169,7 +166,8 @@ func TestReorgErrorDetection(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := isReorgError(tt.err)
+			var reorgErr *reorg.ErrReorgDetected
+			result := errors.As(tt.err, &reorgErr)
 			require.Equal(t, tt.isReorg, result)
 		})
 	}
