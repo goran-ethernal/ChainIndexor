@@ -13,6 +13,7 @@ import (
 	"github.com/goran-ethernal/ChainIndexor/internal/reorg"
 	"github.com/goran-ethernal/ChainIndexor/internal/rpc"
 	itypes "github.com/goran-ethernal/ChainIndexor/internal/types"
+	"github.com/goran-ethernal/ChainIndexor/pkg/fetcher/store"
 )
 
 // LogFetcherConfig contains configuration for the LogFetcher.
@@ -41,7 +42,7 @@ type LogFetcher struct {
 	cfg           LogFetcherConfig
 	rpc           *rpc.Client
 	reorgDetector *reorg.ReorgDetector
-	logStore      LogStore
+	logStore      store.LogStore
 	log           *logger.Logger
 	mode          FetchMode
 }
@@ -52,7 +53,7 @@ func NewLogFetcher(
 	log *logger.Logger,
 	rpcClient *rpc.Client,
 	reorgDetector *reorg.ReorgDetector,
-	logStore LogStore,
+	logStore store.LogStore,
 ) *LogFetcher {
 	return &LogFetcher{
 		cfg:           cfg,

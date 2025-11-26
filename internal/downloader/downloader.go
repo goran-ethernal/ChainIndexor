@@ -9,6 +9,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/goran-ethernal/ChainIndexor/internal/fetcher"
+	"github.com/goran-ethernal/ChainIndexor/internal/fetcher/store"
 	"github.com/goran-ethernal/ChainIndexor/internal/indexer"
 	"github.com/goran-ethernal/ChainIndexor/internal/logger"
 	"github.com/goran-ethernal/ChainIndexor/internal/reorg"
@@ -167,7 +168,7 @@ func (d *Downloader) Download(ctx context.Context) error {
 	d.mu.RUnlock()
 
 	// Create LogStore using the sync manager's database connection
-	logStore := fetcher.NewSQLiteLogStore(d.syncManager.DB(), d.log)
+	logStore := store.NewLogStore(d.syncManager.DB(), d.log)
 
 	d.logFetcher = fetcher.NewLogFetcher(fetcher.LogFetcherConfig{
 		ChunkSize:          d.cfg.ChunkSize,

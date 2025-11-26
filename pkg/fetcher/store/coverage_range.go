@@ -1,4 +1,4 @@
-package fetcher
+package store
 
 // CoverageRange represents a block range that has been downloaded and stored.
 type CoverageRange struct {
