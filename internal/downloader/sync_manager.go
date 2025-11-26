@@ -8,6 +8,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/goran-ethernal/ChainIndexor/internal/db"
 	"github.com/goran-ethernal/ChainIndexor/internal/downloader/migrations"
+	"github.com/goran-ethernal/ChainIndexor/internal/fetcher"
 	"github.com/goran-ethernal/ChainIndexor/internal/logger"
 	"github.com/russross/meddler"
 )
@@ -28,13 +29,13 @@ type SyncState struct {
 	Mode                 string      `meddler:"mode" json:"mode"`
 }
 
-// GetMode returns the Mode as a FetchMode type.
-func (s *SyncState) GetMode() FetchMode {
-	return FetchMode(s.Mode)
+// GetMode returns the Mode as a fetcher.FetchMode type.
+func (s *SyncState) GetMode() fetcher.FetchMode {
+	return fetcher.FetchMode(s.Mode)
 }
 
-// SetMode sets the Mode from a FetchMode type.
-func (s *SyncState) SetMode(mode FetchMode) {
+// SetMode sets the Mode from a fetcher.FetchMode type.
+func (s *SyncState) SetMode(mode fetcher.FetchMode) {
 	s.Mode = string(mode)
 }
 
@@ -92,7 +93,7 @@ func (sm *SyncManager) GetState() (*SyncState, error) {
 }
 
 // SaveCheckpoint saves a checkpoint with the given block number, hash, and mode.
-func (sm *SyncManager) SaveCheckpoint(blockNum uint64, blockHash common.Hash, mode FetchMode) error {
+func (sm *SyncManager) SaveCheckpoint(blockNum uint64, blockHash common.Hash, mode fetcher.FetchMode) error {
 	state := SyncState{
 		ID:                   1,
 		LastIndexedBlock:     blockNum,
@@ -117,7 +118,7 @@ func (sm *SyncManager) SaveCheckpoint(blockNum uint64, blockHash common.Hash, mo
 }
 
 // SetMode updates the synchronization mode.
-func (sm *SyncManager) SetMode(mode FetchMode) error {
+func (sm *SyncManager) SetMode(mode fetcher.FetchMode) error {
 	// First get current state to preserve other fields
 	state, err := sm.GetState()
 	if err != nil {
@@ -145,7 +146,7 @@ func (sm *SyncManager) Reset(startBlock uint64) error {
 		LastIndexedBlock:     startBlock,
 		LastIndexedBlockHash: common.Hash{},
 		LastIndexedTimestamp: time.Now().Unix(),
-		Mode:                 string(ModeBackfill),
+		Mode:                 string(fetcher.ModeBackfill),
 	}
 
 	err := meddler.Update(sm.db, "sync_state", &state)
@@ -155,7 +156,7 @@ func (sm *SyncManager) Reset(startBlock uint64) error {
 
 	sm.log.Warnw("sync state reset",
 		"start_block", startBlock,
-		"mode", ModeBackfill,
+		"mode", fetcher.ModeBackfill,
 	)
 
 	return nil
@@ -164,4 +165,9 @@ func (sm *SyncManager) Reset(startBlock uint64) error {
 // Close closes the database connection.
 func (sm *SyncManager) Close() error {
 	return sm.db.Close()
+}
+
+// DB returns the database connection for use by other components.
+func (sm *SyncManager) DB() *sql.DB {
+	return sm.db
 }

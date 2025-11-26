@@ -1,4 +1,4 @@
-package downloader
+package fetcher
 
 import (
 	"context"
@@ -10,9 +10,9 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/goran-ethernal/ChainIndexor/internal/logger"
+	"github.com/goran-ethernal/ChainIndexor/internal/reorg"
 	"github.com/goran-ethernal/ChainIndexor/internal/rpc"
 	itypes "github.com/goran-ethernal/ChainIndexor/internal/types"
-	"github.com/goran-ethernal/ChainIndexor/pkg/reorg"
 )
 
 // LogFetcherConfig contains configuration for the LogFetcher.
@@ -31,6 +31,9 @@ type LogFetcherConfig struct {
 
 	// Topics are the event topic filters
 	Topics [][]common.Hash
+
+	// AddressStartBlocks maps each address to its minimum start block
+	AddressStartBlocks map[common.Address]uint64
 }
 
 // LogFetcher handles fetching logs and block headers from the blockchain.
@@ -38,16 +41,24 @@ type LogFetcher struct {
 	cfg           LogFetcherConfig
 	rpc           *rpc.Client
 	reorgDetector *reorg.ReorgDetector
+	logStore      LogStore
 	log           *logger.Logger
 	mode          FetchMode
 }
 
 // NewLogFetcher creates a new LogFetcher instance.
-func NewLogFetcher(cfg LogFetcherConfig, rpcClient *rpc.Client, reorgDetector *reorg.ReorgDetector, log *logger.Logger) *LogFetcher {
+func NewLogFetcher(
+	cfg LogFetcherConfig,
+	log *logger.Logger,
+	rpcClient *rpc.Client,
+	reorgDetector *reorg.ReorgDetector,
+	logStore LogStore,
+) *LogFetcher {
 	return &LogFetcher{
 		cfg:           cfg,
 		rpc:           rpcClient,
 		reorgDetector: reorgDetector,
+		logStore:      logStore,
 		log:           log.WithComponent("log-fetcher"),
 		mode:          ModeBackfill,
 	}
@@ -73,27 +84,22 @@ func (lf *LogFetcher) FetchRange(ctx context.Context, fromBlock, toBlock uint64)
 		"mode", lf.mode,
 	)
 
-	// Build the filter query
-	query := ethereum.FilterQuery{
-		FromBlock: big.NewInt(int64(fromBlock)),
-		ToBlock:   big.NewInt(int64(toBlock)),
-		Addresses: lf.cfg.Addresses,
-		Topics:    lf.cfg.Topics,
+	// Build dynamic filter with only addresses that have reached their start block
+	activeAddresses := make([]common.Address, 0, len(lf.cfg.Addresses))
+	activeTopics := make([][]common.Hash, 0, len(lf.cfg.Topics))
+
+	for i, addr := range lf.cfg.Addresses {
+		startBlock, exists := lf.cfg.AddressStartBlocks[addr]
+		// Include address if:
+		// 1. No start block is configured (shouldn't happen but be safe), OR
+		// 2. We've reached or passed the start block
+		if !exists || fromBlock >= startBlock {
+			activeAddresses = append(activeAddresses, addr)
+			activeTopics = append(activeTopics, lf.cfg.Topics[i])
+		}
 	}
 
-	// Fetch logs
-	logs, err := lf.rpc.GetLogs(ctx, query)
-	if err != nil {
-		return nil, fmt.Errorf("failed to fetch logs: %w", err)
-	}
-
-	// Verify consistency and record blocks
-	// The reorg detector will fetch headers itself and verify everything
-	if err := lf.reorgDetector.VerifyAndRecordBlocks(ctx, logs, fromBlock, toBlock); err != nil {
-		return nil, fmt.Errorf("reorg detected: %w", err)
-	}
-
-	// Fetch block headers for the result (after reorg verification passed)
+	// Fetch block headers first (needed for reorg detection even if no logs)
 	blockNumbers := make([]uint64, 0, toBlock-fromBlock+1)
 	for blockNum := fromBlock; blockNum <= toBlock; blockNum++ {
 		blockNumbers = append(blockNumbers, blockNum)
@@ -102,6 +108,58 @@ func (lf *LogFetcher) FetchRange(ctx context.Context, fromBlock, toBlock uint64)
 	headers, err := lf.rpc.BatchGetBlockHeaders(ctx, blockNumbers)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch headers: %w", err)
+	}
+
+	var logs []types.Log
+
+	// Only fetch logs if we have active addresses
+	if len(activeAddresses) > 0 {
+		// Build the filter query
+		query := ethereum.FilterQuery{
+			FromBlock: big.NewInt(int64(fromBlock)),
+			ToBlock:   big.NewInt(int64(toBlock)),
+			Addresses: activeAddresses,
+			Topics:    activeTopics,
+		}
+
+		// Fetch logs
+		logs, err = lf.rpc.GetLogs(ctx, query)
+		if err != nil {
+			return nil, fmt.Errorf("failed to fetch logs: %w", err)
+		}
+
+		lf.log.Debugw("fetched logs",
+			"from_block", fromBlock,
+			"to_block", toBlock,
+			"active_addresses", len(activeAddresses),
+			"total_addresses", len(lf.cfg.Addresses),
+			"logs_count", len(logs),
+		)
+	} else {
+		// No active addresses yet - return empty logs
+		logs = []types.Log{}
+		lf.log.Debugw("skipped log fetch - no active addresses yet",
+			"from_block", fromBlock,
+			"to_block", toBlock,
+			"total_addresses", len(lf.cfg.Addresses),
+		)
+	}
+
+	// Verify consistency and record blocks
+	// The reorg detector will verify headers and detect any reorgs
+	if err := lf.reorgDetector.VerifyAndRecordBlocks(ctx, logs, fromBlock, toBlock); err != nil {
+		// If reorg detected, invalidate cache
+		if reorgErr, ok := err.(*reorg.ErrReorgDetected); ok {
+			lf.log.Warnw("reorg detected, invalidating cache",
+				"from_block", reorgErr.FirstReorgBlock,
+			)
+			if storeErr := lf.logStore.HandleReorg(ctx, reorgErr.FirstReorgBlock); storeErr != nil {
+				lf.log.Errorw("failed to handle reorg in log store",
+					"error", storeErr,
+				)
+			}
+		}
+		return nil, fmt.Errorf("reorg detected: %w", err)
 	}
 
 	lf.log.Infow("fetched range",

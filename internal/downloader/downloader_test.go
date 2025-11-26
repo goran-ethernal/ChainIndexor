@@ -7,16 +7,17 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/goran-ethernal/ChainIndexor/internal/indexer"
 	"github.com/goran-ethernal/ChainIndexor/internal/logger"
+	"github.com/goran-ethernal/ChainIndexor/internal/reorg"
 	"github.com/goran-ethernal/ChainIndexor/pkg/config"
-	"github.com/goran-ethernal/ChainIndexor/pkg/indexer"
-	"github.com/goran-ethernal/ChainIndexor/pkg/reorg"
 	"github.com/stretchr/testify/require"
 )
 
 // mockIndexer implements the indexer.Indexer interface for testing
 type mockIndexer struct {
 	eventsToIndex map[common.Address]map[common.Hash]struct{}
+	startBlock    uint64
 }
 
 func (m *mockIndexer) EventsToIndex() map[common.Address]map[common.Hash]struct{} {
@@ -29,6 +30,10 @@ func (m *mockIndexer) HandleLogs(logs []types.Log) error {
 
 func (m *mockIndexer) HandleReorg(blockNum uint64) error {
 	return nil
+}
+
+func (m *mockIndexer) StartBlock() uint64 {
+	return m.startBlock
 }
 
 func TestDownloaderCreation(t *testing.T) {
@@ -63,12 +68,13 @@ func TestIndexerRegistration(t *testing.T) {
 	}
 
 	d := &Downloader{
-		cfg:         cfg,
-		syncManager: sm,
-		log:         log.WithComponent("downloader"),
-		coordinator: indexer.NewIndexerCoordinator(),
-		addresses:   make([]common.Address, 0),
-		topics:      make([][]common.Hash, 0),
+		cfg:                cfg,
+		syncManager:        sm,
+		log:                log.WithComponent("downloader"),
+		coordinator:        indexer.NewIndexerCoordinator(),
+		addresses:          make([]common.Address, 0),
+		topics:             make([][]common.Hash, 0),
+		addressStartBlocks: make(map[common.Address]uint64),
 	}
 
 	// Create first mock indexer
@@ -79,6 +85,7 @@ func TestIndexerRegistration(t *testing.T) {
 		eventsToIndex: map[common.Address]map[common.Hash]struct{}{
 			addr1: {topic1: {}},
 		},
+		startBlock: 100,
 	}
 
 	// Create second mock indexer with different address and topic
@@ -89,6 +96,7 @@ func TestIndexerRegistration(t *testing.T) {
 		eventsToIndex: map[common.Address]map[common.Hash]struct{}{
 			addr2: {topic2: {}},
 		},
+		startBlock: 200,
 	}
 
 	// Create third mock indexer with same address as first but different topic
@@ -98,6 +106,7 @@ func TestIndexerRegistration(t *testing.T) {
 		eventsToIndex: map[common.Address]map[common.Hash]struct{}{
 			addr1: {topic3: {}}, // Same address as mock1
 		},
+		startBlock: 150,
 	}
 
 	// Register all indexers

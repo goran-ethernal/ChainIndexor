@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/goran-ethernal/ChainIndexor/internal/fetcher"
 	"github.com/goran-ethernal/ChainIndexor/internal/logger"
 	"github.com/stretchr/testify/require"
 )
@@ -26,7 +27,7 @@ func TestSyncManager(t *testing.T) {
 	state, err := sm.GetState()
 	require.NoError(t, err)
 	require.Equal(t, uint64(0), state.LastIndexedBlock)
-	require.Equal(t, ModeBackfill, state.GetMode())
+	require.Equal(t, fetcher.ModeBackfill, state.GetMode())
 
 	// Test GetLastIndexedBlock
 	lastBlock, err := sm.GetLastIndexedBlock()
@@ -35,7 +36,7 @@ func TestSyncManager(t *testing.T) {
 
 	// Test SaveCheckpoint
 	testHash := common.HexToHash("0xabc123")
-	err = sm.SaveCheckpoint(100, testHash, ModeBackfill)
+	err = sm.SaveCheckpoint(100, testHash, fetcher.ModeBackfill)
 	require.NoError(t, err)
 
 	lastBlock, err = sm.GetLastIndexedBlock()
@@ -46,29 +47,29 @@ func TestSyncManager(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, uint64(100), state.LastIndexedBlock)
 	require.Equal(t, testHash, state.LastIndexedBlockHash)
-	require.Equal(t, ModeBackfill, state.GetMode())
+	require.Equal(t, fetcher.ModeBackfill, state.GetMode())
 	require.Greater(t, state.LastIndexedTimestamp, int64(0))
 
 	// Test mode change
 	testHash2 := common.HexToHash("0xdef456")
-	err = sm.SaveCheckpoint(200, testHash2, ModeLive)
+	err = sm.SaveCheckpoint(200, testHash2, fetcher.ModeLive)
 	require.NoError(t, err)
 
 	state, err = sm.GetState()
 	require.NoError(t, err)
 	require.Equal(t, uint64(200), state.LastIndexedBlock)
 	require.Equal(t, testHash2, state.LastIndexedBlockHash)
-	require.Equal(t, ModeLive, state.GetMode())
+	require.Equal(t, fetcher.ModeLive, state.GetMode())
 
 	// Test SetMode
-	err = sm.SetMode(ModeBackfill)
+	err = sm.SetMode(fetcher.ModeBackfill)
 	require.NoError(t, err)
 
 	state, err = sm.GetState()
 	require.NoError(t, err)
 	require.Equal(t, uint64(200), state.LastIndexedBlock)   // Block unchanged
 	require.Equal(t, testHash2, state.LastIndexedBlockHash) // Hash unchanged
-	require.Equal(t, ModeBackfill, state.GetMode())         // Mode changed
+	require.Equal(t, fetcher.ModeBackfill, state.GetMode()) // Mode changed
 
 	// Test Reset
 	err = sm.Reset(50)
@@ -78,7 +79,7 @@ func TestSyncManager(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, uint64(50), state.LastIndexedBlock)
 	require.Equal(t, common.Hash{}, state.LastIndexedBlockHash) // Hash cleared on reset
-	require.Equal(t, ModeBackfill, state.GetMode())
+	require.Equal(t, fetcher.ModeBackfill, state.GetMode())
 }
 
 func TestSyncManagerPersistence(t *testing.T) {
@@ -94,7 +95,7 @@ func TestSyncManagerPersistence(t *testing.T) {
 	require.NoError(t, err)
 
 	persistHash := common.HexToHash("0x123abc")
-	err = sm.SaveCheckpoint(500, persistHash, ModeLive)
+	err = sm.SaveCheckpoint(500, persistHash, fetcher.ModeLive)
 	require.NoError(t, err)
 	sm.Close()
 
@@ -108,5 +109,5 @@ func TestSyncManagerPersistence(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, uint64(500), state.LastIndexedBlock)
 	require.Equal(t, persistHash, state.LastIndexedBlockHash)
-	require.Equal(t, ModeLive, state.GetMode())
+	require.Equal(t, fetcher.ModeLive, state.GetMode())
 }

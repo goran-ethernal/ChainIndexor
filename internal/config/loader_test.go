@@ -72,7 +72,6 @@ func validateConfig(t *testing.T, cfg *config.Config, format string) {
 
 	// Test downloader config
 	require.NotEmpty(t, cfg.Downloader.RPCURL, "[%s] downloader.rpc_url should not be empty", format)
-	require.Equal(t, uint64(17000000), cfg.Downloader.StartBlock, "[%s] downloader.start_block should be 17000000", format)
 
 	// Test defaults applied
 	require.NotZero(t, cfg.Downloader.ChunkSize, "[%s] downloader.chunk_size should not be zero")

@@ -1,7 +1,6 @@
 {
   "downloader": {
     "rpc_url": "https://mainnet.infura.io/v3/XXXX",
-    "start_block": 17000000,
     "chunk_size": 5000,
     "finality": "finalized",
     "finalized_lag": 12,
@@ -19,6 +18,7 @@
   "indexers": [
     {
       "name": "MyTokenIndexer",
+      "start_block": 17000000,
       "db": {
         "path": "./data/mytokenindexer.sqlite",
         "journal_mode": "WAL",

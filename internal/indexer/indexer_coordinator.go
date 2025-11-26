@@ -6,6 +6,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/goran-ethernal/ChainIndexor/pkg/indexer"
 )
 
 // IndexerCoordinator manages multiple indexers and routes events to them based on address and topics.
@@ -13,46 +14,53 @@ type IndexerCoordinator struct {
 	mu sync.RWMutex
 
 	// addressTopics maps address -> topic -> indexers for specific topic filters
-	addressTopics map[common.Address]map[common.Hash][]Indexer
+	addressTopics map[common.Address]map[common.Hash][]indexer.Indexer
 
 	// addressAllTopics maps address -> indexers that want ALL topics from that address
-	addressAllTopics map[common.Address][]Indexer
+	addressAllTopics map[common.Address][]indexer.Indexer
 
 	// indexers holds all registered indexers
-	indexers []Indexer
+	indexers []indexer.Indexer
+
+	// startBlocks maps each indexer to its start block
+	startBlocks map[indexer.Indexer]uint64
 }
 
 // NewIndexerCoordinator creates a new IndexerCoordinator.
 func NewIndexerCoordinator() *IndexerCoordinator {
 	return &IndexerCoordinator{
-		indexers:         make([]Indexer, 0),
-		addressTopics:    make(map[common.Address]map[common.Hash][]Indexer),
-		addressAllTopics: make(map[common.Address][]Indexer),
+		indexers:         make([]indexer.Indexer, 0),
+		addressTopics:    make(map[common.Address]map[common.Hash][]indexer.Indexer),
+		addressAllTopics: make(map[common.Address][]indexer.Indexer),
+		startBlocks:      make(map[indexer.Indexer]uint64),
 	}
 }
 
 // RegisterIndexer registers a new indexer.
-func (ic *IndexerCoordinator) RegisterIndexer(indexer Indexer) {
+func (ic *IndexerCoordinator) RegisterIndexer(idx indexer.Indexer) {
 	ic.mu.Lock()
 	defer ic.mu.Unlock()
 
-	addressTopics := indexer.EventsToIndex()
+	// Store the indexer's start block
+	ic.startBlocks[idx] = idx.StartBlock()
+
+	addressTopics := idx.EventsToIndex()
 	for addr, topics := range addressTopics {
 		if len(topics) == 0 {
 			// Empty topic set means indexer wants ALL events from this address
-			ic.addressAllTopics[addr] = append(ic.addressAllTopics[addr], indexer)
+			ic.addressAllTopics[addr] = append(ic.addressAllTopics[addr], idx)
 		} else {
 			// Specific topics - build routing map
 			if _, exists := ic.addressTopics[addr]; !exists {
-				ic.addressTopics[addr] = make(map[common.Hash][]Indexer)
+				ic.addressTopics[addr] = make(map[common.Hash][]indexer.Indexer)
 			}
 			for topic := range topics {
-				ic.addressTopics[addr][topic] = append(ic.addressTopics[addr][topic], indexer)
+				ic.addressTopics[addr][topic] = append(ic.addressTopics[addr][topic], idx)
 			}
 		}
 	}
 
-	ic.indexers = append(ic.indexers, indexer)
+	ic.indexers = append(ic.indexers, idx)
 }
 
 // HandleLogs processes a batch of logs and routes them to the appropriate indexers.
@@ -62,12 +70,11 @@ func (ic *IndexerCoordinator) HandleLogs(logs []types.Log) error {
 	defer ic.mu.RUnlock()
 
 	// Group logs by indexer to avoid duplicate processing
-	indexerLogs := make(map[Indexer][]types.Log)
+	indexerLogs := make(map[indexer.Indexer][]types.Log)
 
 	for _, log := range logs {
 		// Collect all indexers interested in this log
-		interestedIndexers := make(map[Indexer]struct{})
-
+		interestedIndexers := make(map[indexer.Indexer]struct{})
 		// Check indexers that want ALL topics from this address
 		if indexers, exists := ic.addressAllTopics[log.Address]; exists {
 			for _, idx := range indexers {
@@ -95,8 +102,20 @@ func (ic *IndexerCoordinator) HandleLogs(logs []types.Log) error {
 
 	// Call HandleLogs for each indexer with their relevant logs
 	for indexer, relevantLogs := range indexerLogs {
-		if err := indexer.HandleLogs(relevantLogs); err != nil {
-			return fmt.Errorf("indexer failed to handle logs: %w", err)
+		// Filter logs based on the indexer's start block
+		startBlock := ic.startBlocks[indexer]
+		filteredLogs := make([]types.Log, 0, len(relevantLogs))
+		for _, log := range relevantLogs {
+			if log.BlockNumber >= startBlock {
+				filteredLogs = append(filteredLogs, log)
+			}
+		}
+
+		// Only call HandleLogs if there are logs to process
+		if len(filteredLogs) > 0 {
+			if err := indexer.HandleLogs(filteredLogs); err != nil {
+				return fmt.Errorf("indexer failed to handle logs: %w", err)
+			}
 		}
 	}
 
@@ -116,4 +135,15 @@ func (ic *IndexerCoordinator) HandleReorg(blockNum uint64) error {
 	}
 
 	return nil
+}
+
+func (ic *IndexerCoordinator) IndexerStartBlocks() []uint64 {
+	ic.mu.RLock()
+	defer ic.mu.RUnlock()
+
+	startBlocks := make([]uint64, 0, len(ic.indexers))
+	for _, idx := range ic.indexers {
+		startBlocks = append(startBlocks, ic.startBlocks[idx])
+	}
+	return startBlocks
 }

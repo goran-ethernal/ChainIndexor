@@ -20,4 +20,9 @@ type Indexer interface {
 	// HandleReorg handles a blockchain reorganization starting from the given block number.
 	// Implementations should roll back any data persisted at or after this block.
 	HandleReorg(blockNum uint64) error
+
+	// StartBlock returns the block number from which this indexer wants to start processing logs.
+	// The downloader will use the minimum StartBlock across all registered indexers to determine
+	// the earliest block to fetch. Each indexer will only receive logs from blocks >= its StartBlock.
+	StartBlock() uint64
 }
