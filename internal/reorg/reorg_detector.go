@@ -3,6 +3,7 @@ package reorg
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -10,19 +11,23 @@ import (
 	"github.com/goran-ethernal/ChainIndexor/internal/db"
 	"github.com/goran-ethernal/ChainIndexor/internal/logger"
 	"github.com/goran-ethernal/ChainIndexor/internal/reorg/migrations"
-	"github.com/goran-ethernal/ChainIndexor/internal/rpc"
+	"github.com/goran-ethernal/ChainIndexor/pkg/reorg"
+	"github.com/goran-ethernal/ChainIndexor/pkg/rpc"
 	"github.com/russross/meddler"
 )
+
+var _ reorg.Detector = (*ReorgDetector)(nil)
 
 // ReorgDetector detects blockchain reorganizations by tracking block hashes.
 type ReorgDetector struct {
 	db  *sql.DB
-	rpc *rpc.Client
 	log *logger.Logger
+
+	rpc rpc.EthClient
 }
 
 // NewReorgDetector creates a new ReorgDetector with the given database connection.
-func NewReorgDetector(dbPath string, rpcClient *rpc.Client, log *logger.Logger) (*ReorgDetector, error) {
+func NewReorgDetector(dbPath string, rpcClient rpc.EthClient, log *logger.Logger) (*ReorgDetector, error) {
 	// Run migrations to set up the database schema
 	err := migrations.RunMigrations(dbPath)
 	if err != nil {
@@ -64,7 +69,7 @@ func (r *ReorgDetector) VerifyAndRecordBlocks(ctx context.Context, logs []types.
 		return fmt.Errorf("failed to begin transaction: %w", err)
 	}
 	defer func() {
-		if err := tx.Rollback(); err != nil && err != sql.ErrTxDone {
+		if err := tx.Rollback(); err != nil && !errors.Is(err, sql.ErrTxDone) {
 			r.log.Errorw("failed to rollback transaction", "error", err)
 		}
 	}()
@@ -78,7 +83,7 @@ func (r *ReorgDetector) VerifyAndRecordBlocks(ctx context.Context, logs []types.
 
 	// Check if we have the finalized block in our DB
 	cachedFinalizedBlock, err := r.getStoredBlockTx(tx, finalizedBlockNum)
-	if err != nil && err != sql.ErrNoRows {
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return fmt.Errorf("failed to query finalized block hash: %w", err)
 	}
 
@@ -226,10 +231,13 @@ func (r *ReorgDetector) getStoredBlockTx(tx *sql.Tx, blockNum uint64) (StoredBlo
 	return block, nil
 }
 
-// getStoredBlocksAfterBlockTx retrieves all blocks from the DB that happened after the provided block using a transaction.
-func (r *ReorgDetector) getStoredBlocksAfterBlockTx(tx *sql.Tx, finalizedBlockNum uint64) ([]StoredBlock, error) {
-	var blocks []StoredBlock
-	err := meddler.QueryAll(tx, &blocks, "SELECT * FROM block_hashes WHERE block_number > ? ORDER BY block_number ASC", finalizedBlockNum)
+// getStoredBlocksAfterBlockTx retrieves all blocks from the DB
+// that happened after the provided block using a transaction.
+func (r *ReorgDetector) getStoredBlocksAfterBlockTx(tx *sql.Tx, finalizedBlockNum uint64) ([]*StoredBlock, error) {
+	var blocks []*StoredBlock
+	err := meddler.QueryAll(tx, &blocks,
+		"SELECT * FROM block_hashes WHERE block_number > ? ORDER BY block_number ASC",
+		finalizedBlockNum)
 	if err != nil {
 		return nil, err
 	}

@@ -1,0 +1,85 @@
+version: "2"
+run:
+  tests: true
+linters:
+  default: none
+  enable:
+    - dogsled
+    - dupl
+    - errcheck
+    - errname
+    - errorlint
+    - forcetypeassert
+    - goconst
+    - gocritic
+    - gosec
+    - importas
+    - lll
+    - makezero
+    - misspell
+    - mnd
+    - nolintlint
+    - prealloc
+    - predeclared
+    - staticcheck
+    - thelper
+    - tparallel
+    - unconvert
+    - unparam
+    - unused
+    - wastedassign
+    - whitespace
+  settings:
+    goconst:
+      min-len: 3
+      min-occurrences: 3
+    gocritic:
+      enabled-checks:
+        - ruleguard
+      disabled-checks:
+        - ifElseChain
+    gosec:
+      excludes:
+        - G115
+    revive:
+      rules:
+        - name: exported
+          arguments:
+            - disableStutteringCheck
+  exclusions:
+    generated: lax
+    presets:
+      - common-false-positives
+      - legacy
+      - std-error-handling
+    rules:
+      - linters:
+          - gosec
+          - lll
+          - unparam
+        path: (_test\.go|^test/.*)
+      - linters:
+          - dupl
+        path: etherman/contracts/contracts_(banana|elderberry)\.go
+    paths:
+      - tests
+      - third_party$
+      - builtin$
+      - examples$
+issues:
+  whole-files: true
+formatters:
+  enable:
+    - gci
+    - gofmt
+    - goimports
+  settings:
+    gofmt:
+      simplify: true
+  exclusions:
+    generated: lax
+    paths:
+      - tests
+      - third_party$
+      - builtin$
+      - examples$

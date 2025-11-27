@@ -2,6 +2,7 @@ package fetcher
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math/big"
 	"time"
@@ -15,6 +16,8 @@ import (
 	itypes "github.com/goran-ethernal/ChainIndexor/internal/types"
 	"github.com/goran-ethernal/ChainIndexor/pkg/fetcher/store"
 )
+
+const ethereumBlockTime = 12 * time.Second
 
 // LogFetcherConfig contains configuration for the LogFetcher.
 type LogFetcherConfig struct {
@@ -159,7 +162,8 @@ func (lf *LogFetcher) fetchRange(
 	// The reorg detector will verify headers and detect any reorgs
 	if err := lf.reorgDetector.VerifyAndRecordBlocks(ctx, logs, fromBlock, toBlock); err != nil {
 		// If reorg detected, invalidate cache
-		if reorgErr, ok := err.(*reorg.ErrReorgDetected); ok {
+		var reorgErr *reorg.ReorgDetectedError
+		if errors.As(err, &reorgErr) {
 			lf.log.Warnw("reorg detected, invalidating cache",
 				"from_block", reorgErr.FirstReorgBlock,
 			)
@@ -221,7 +225,8 @@ func (lf *LogFetcher) fetchBackfill(
 		lf.log.Info("found unsynced logs, syncing them first")
 
 		unsyncedAddresses, unsyncedTopics, lastCoveredBlock := nonSyncedLogs.GetAddressesAndTopics()
-		fromBlock := max(downloaderStartBlock, lastCoveredBlock+1)     // if we already synced past downloaderStartBlock, start from lastIndexedBlock+1
+		// if we already synced past downloaderStartBlock, start from lastIndexedBlock+1
+		fromBlock := max(downloaderStartBlock, lastCoveredBlock+1)
 		toBlock := min(fromBlock+lf.cfg.ChunkSize-1, lastIndexedBlock) // Don't fetch beyond last indexed block
 		return lf.fetchRange(
 			ctx,
@@ -272,7 +277,7 @@ func (lf *LogFetcher) fetchLive(ctx context.Context, lastIndexedBlock uint64) (*
 		select {
 		case <-ctx.Done():
 			return nil, ctx.Err()
-		case <-time.After(12 * time.Second): // Ethereum block time
+		case <-time.After(ethereumBlockTime):
 			return lf.fetchLive(ctx, lastIndexedBlock)
 		}
 	}

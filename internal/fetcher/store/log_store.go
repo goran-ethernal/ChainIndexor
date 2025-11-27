@@ -27,7 +27,11 @@ func NewLogStore(db *sql.DB, log *logger.Logger) *LogStore {
 }
 
 // GetLogs retrieves logs for the given address and block range.
-func (s *LogStore) GetLogs(ctx context.Context, address common.Address, fromBlock, toBlock uint64) ([]types.Log, []store.CoverageRange, error) {
+func (s *LogStore) GetLogs(
+	ctx context.Context,
+	address common.Address,
+	fromBlock, toBlock uint64,
+) ([]types.Log, []store.CoverageRange, error) {
 	// Get coverage information
 	const coverageQuery = `
 		SELECT * FROM log_coverage
@@ -62,11 +66,7 @@ func (s *LogStore) GetLogs(ctx context.Context, address common.Address, fromBloc
 
 	logs := make([]types.Log, len(dbLogs))
 	for i, dl := range dbLogs {
-		log, err := s.dbLogToEthLog(dl)
-		if err != nil {
-			return nil, nil, fmt.Errorf("failed to convert db log to eth log: %w", err)
-		}
-		logs[i] = log
+		logs[i] = s.dbLogToEthLog(dl)
 	}
 
 	return logs, coverage, nil
@@ -74,7 +74,12 @@ func (s *LogStore) GetLogs(ctx context.Context, address common.Address, fromBloc
 
 // GetUnsyncedTopics checks which address-topic combinations have not been fully synced up to the given block.
 // For each address, it returns the list of topics that are missing coverage up to upToBlock.
-func (s *LogStore) GetUnsyncedTopics(ctx context.Context, addresses []common.Address, topics [][]common.Hash, upToBlock uint64) (*store.UnsyncedTopics, error) {
+func (s *LogStore) GetUnsyncedTopics(
+	ctx context.Context,
+	addresses []common.Address,
+	topics [][]common.Hash,
+	upToBlock uint64,
+) (*store.UnsyncedTopics, error) {
 	result := store.NewUnsyncedTopics()
 
 	// For each address-topic combination, check if there's complete coverage up to upToBlock
@@ -145,7 +150,13 @@ func (s *LogStore) hasCompleteCoverage(coverages []*dbTopicCoverage, fromBlock, 
 }
 
 // StoreLogs saves logs to the store for the given address and block range.
-func (s *LogStore) StoreLogs(ctx context.Context, address common.Address, topics []common.Hash, fromBlock, toBlock uint64, logs []types.Log) error {
+func (s *LogStore) StoreLogs(
+	ctx context.Context,
+	address common.Address,
+	topics []common.Hash,
+	fromBlock, toBlock uint64,
+	logs []types.Log,
+) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("failed to begin transaction: %w", err)
@@ -198,7 +209,8 @@ func (s *LogStore) StoreLogs(ctx context.Context, address common.Address, topics
 		return fmt.Errorf("failed to commit transaction: %w", err)
 	}
 
-	s.log.Debugf("Stored %d logs for address %s, %d topics, blocks %d-%d", len(logs), address.Hex(), len(topics), fromBlock, toBlock)
+	s.log.Debugf("Stored %d logs for address %s, %d topics, blocks %d-%d",
+		len(logs), address.Hex(), len(topics), fromBlock, toBlock)
 
 	return nil
 }
@@ -360,6 +372,7 @@ func (s *LogStore) ethLogToDbLog(log *types.Log) *dbLog {
 	}
 
 	// Convert topics
+
 	if len(log.Topics) > 0 {
 		topic0 := log.Topics[0]
 		dbLog.Topic0 = &topic0
@@ -368,11 +381,11 @@ func (s *LogStore) ethLogToDbLog(log *types.Log) *dbLog {
 		topic1 := log.Topics[1]
 		dbLog.Topic1 = &topic1
 	}
-	if len(log.Topics) > 2 {
+	if len(log.Topics) > 2 { //nolint:mnd
 		topic2 := log.Topics[2]
 		dbLog.Topic2 = &topic2
 	}
-	if len(log.Topics) > 3 {
+	if len(log.Topics) > 3 { //nolint:mnd
 		topic3 := log.Topics[3]
 		dbLog.Topic3 = &topic3
 	}
@@ -381,7 +394,7 @@ func (s *LogStore) ethLogToDbLog(log *types.Log) *dbLog {
 }
 
 // dbLogToEthLog converts a database log to an Ethereum log.
-func (s *LogStore) dbLogToEthLog(dbLog *dbLog) (types.Log, error) {
+func (s *LogStore) dbLogToEthLog(dbLog *dbLog) types.Log {
 	log := types.Log{
 		Address:     dbLog.Address,
 		BlockNumber: dbLog.BlockNumber,
@@ -408,5 +421,5 @@ func (s *LogStore) dbLogToEthLog(dbLog *dbLog) (types.Log, error) {
 	}
 	log.Topics = topics
 
-	return log, nil
+	return log
 }

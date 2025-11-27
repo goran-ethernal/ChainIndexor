@@ -15,6 +15,8 @@ import (
 )
 
 func setupTestLogStore(t *testing.T) (*LogStore, func()) {
+	t.Helper()
+
 	// Create temporary database
 	tmpFile, err := os.CreateTemp("", "logstore_test_*.db")
 	require.NoError(t, err)

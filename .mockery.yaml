@@ -1,0 +1,24 @@
+issue-845-fix: true
+with-expecter: true
+resolve-type-alias: false
+dir: "{{ .InterfaceDir }}/../mocks"
+outpkg: "mocks"
+filename: "mock_{{ .InterfaceName | snakecase | lower }}.go"
+mockname: "{{ .InterfaceName }}"
+packages:
+  github.com/goran-ethernal/ChainIndexor/pkg/rpc:
+    config:
+      all: true
+      dir: "internal/rpc/mocks"
+  # github.com/goran-ethernal/ChainIndexor/pkg/indexer:
+  #   config:
+  #     all: true
+  #     dir: "internal/indexer/mocks"
+  # github.com/goran-ethernal/ChainIndexor/pkg/reorg:
+  #   config:
+  #     all: true
+  #     dir: "internal/reorg/mocks"
+  # github.com/goran-ethernal/ChainIndexor/pkg/fetcher/store:
+  #   config:
+  #     all: true
+  #     dir: "internal/fetcher/store/mocks"

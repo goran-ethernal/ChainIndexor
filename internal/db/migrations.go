@@ -11,9 +11,10 @@ import (
 )
 
 const (
-	UpDownSeparator   = "-- +migrate Up"
-	dbPrefixReplacer  = "/*dbprefix*/"
-	NoLimitMigrations = 0 // indicate that there is no limit on the number of migrations to run
+	UpDownSeparator     = "-- +migrate Up"
+	dbPrefixReplacer    = "/*dbprefix*/"
+	NoLimitMigrations   = 0 // indicate that there is no limit on the number of migrations to run
+	migrationDirections = 2
 )
 
 type Migration struct {
@@ -56,7 +57,7 @@ func RunMigrationsDBExtended(logger *logger.Logger,
 		prefixed := strings.ReplaceAll(m.SQL, dbPrefixReplacer, m.Prefix)
 		splitted := strings.Split(prefixed, UpDownSeparator)
 
-		if len(splitted) < 2 {
+		if len(splitted) < migrationDirections {
 			return fmt.Errorf("migration %s missing '-- +migrate Up' separator", m.ID)
 		}
 
