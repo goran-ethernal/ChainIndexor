@@ -32,7 +32,7 @@ type LogStore interface {
 
 	// GetUnsyncedTopics returns a map of addresses to topics that have not been synced up to the given block.
 	// This is useful for determining which address-topic combinations need to be fetched.
-	GetUnsyncedTopics(ctx context.Context, addresses []common.Address, topics [][]common.Hash, upToBlock uint64) (map[common.Address][]common.Hash, error)
+	GetUnsyncedTopics(ctx context.Context, addresses []common.Address, topics [][]common.Hash, upToBlock uint64) (*UnsyncedTopics, error)
 
 	// Close closes the log store and releases any resources.
 	Close() error

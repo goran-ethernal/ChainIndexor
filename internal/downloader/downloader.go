@@ -140,6 +140,25 @@ func (d *Downloader) RegisterIndexer(idx idx.Indexer) {
 	)
 }
 
+func (d *Downloader) getDownloaderStartBlock() uint64 {
+	d.mu.RLock()
+	defer d.mu.RUnlock()
+
+	// Determine the minimum start block from all registered indexers
+	minStartBlock := uint64(0)
+	indexerStartBlocks := d.coordinator.IndexerStartBlocks()
+	if len(indexerStartBlocks) > 0 {
+		minStartBlock = ^uint64(0) // Max uint64
+		for _, startBlock := range indexerStartBlocks {
+			if startBlock < minStartBlock {
+				minStartBlock = startBlock
+			}
+		}
+	}
+
+	return minStartBlock
+}
+
 // Download starts the download process, streaming logs to registered indexers.
 // It continues until the context is cancelled or an error occurs.
 func (d *Downloader) Download(ctx context.Context) error {
@@ -187,29 +206,15 @@ func (d *Downloader) Download(ctx context.Context) error {
 
 	// Initialize from saved state or start from the earliest indexer start block
 	lastIndexedBlock := state.LastIndexedBlock
+	downloaderStartBlock := d.getDownloaderStartBlock()
 	if lastIndexedBlock == 0 {
-		// Determine the minimum start block from all registered indexers
-		d.mu.RLock()
-		minStartBlock := uint64(0)
-		indexerStartBlocks := d.coordinator.IndexerStartBlocks()
-		if len(indexerStartBlocks) > 0 {
-			minStartBlock = ^uint64(0) // Max uint64
-			for _, startBlock := range indexerStartBlocks {
-				if startBlock < minStartBlock {
-					minStartBlock = startBlock
-				}
-			}
-		}
-		d.mu.RUnlock()
-
-		lastIndexedBlock = minStartBlock - 1
+		lastIndexedBlock = downloaderStartBlock - 1
 		d.log.Infow("starting fresh download", "start_block", lastIndexedBlock)
 	} else {
 		d.log.Infow("resuming download", "last_indexed_block", lastIndexedBlock)
 	}
 
-	// Set LogFetcher mode based on saved state
-	d.logFetcher.SetMode(state.GetMode())
+	d.logFetcher.SetMode(fetcher.ModeBackfill) // Always start in backfill mode
 
 	// Main download loop
 	for {
@@ -221,7 +226,7 @@ func (d *Downloader) Download(ctx context.Context) error {
 		}
 
 		// Fetch next chunk
-		result, err := d.logFetcher.FetchNext(ctx, lastIndexedBlock)
+		result, err := d.logFetcher.FetchNext(ctx, lastIndexedBlock, downloaderStartBlock)
 		if err != nil {
 			// Check if this is a reorg error
 			var reorgErr *reorg.ErrReorgDetected
@@ -261,26 +266,36 @@ func (d *Downloader) Download(ctx context.Context) error {
 		}
 
 		// Save checkpoint with the last block's hash
-		// Use the hash of the last block in the range
-		lastHeader := result.Headers[len(result.Headers)-1]
-		blockHash := lastHeader.Hash()
+		// Only update if we've progressed past the last saved block
+		// We can receive blocks from already indexed ranges
+		// due to new indexers being added with earlier start blocks
+		if state.LastIndexedBlock <= result.FromBlock {
+			lastHeader := result.Headers[len(result.Headers)-1]
+			blockHash := lastHeader.Hash()
 
-		if err := d.syncManager.SaveCheckpoint(
-			result.ToBlock,
-			blockHash,
-			d.logFetcher.GetMode(),
-		); err != nil {
-			return fmt.Errorf("failed to save checkpoint: %w", err)
+			if err := d.syncManager.SaveCheckpoint(
+				result.ToBlock,
+				blockHash,
+				d.logFetcher.GetMode(),
+			); err != nil {
+				return fmt.Errorf("failed to save checkpoint: %w", err)
+			}
+
+			lastIndexedBlock = result.ToBlock
+
+			d.log.Infow("checkpoint saved",
+				"block", lastIndexedBlock,
+				"block_hash", blockHash.Hex(),
+				"mode", d.logFetcher.GetMode(),
+				"logs_processed", len(result.Logs),
+			)
 		}
 
-		lastIndexedBlock = result.ToBlock
-
-		d.log.Infow("checkpoint saved",
-			"block", lastIndexedBlock,
-			"block_hash", blockHash.Hex(),
-			"mode", d.logFetcher.GetMode(),
-			"logs_processed", len(result.Logs),
-		)
+		// Get new state
+		state, err = d.syncManager.GetState()
+		if err != nil {
+			return fmt.Errorf("failed to get sync state: %w", err)
+		}
 	}
 }
 

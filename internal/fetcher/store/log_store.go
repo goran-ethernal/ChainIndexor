@@ -74,13 +74,12 @@ func (s *LogStore) GetLogs(ctx context.Context, address common.Address, fromBloc
 
 // GetUnsyncedTopics checks which address-topic combinations have not been fully synced up to the given block.
 // For each address, it returns the list of topics that are missing coverage up to upToBlock.
-func (s *LogStore) GetUnsyncedTopics(ctx context.Context, addresses []common.Address, topics [][]common.Hash, upToBlock uint64) (map[common.Address][]common.Hash, error) {
-	result := make(map[common.Address][]common.Hash)
+func (s *LogStore) GetUnsyncedTopics(ctx context.Context, addresses []common.Address, topics [][]common.Hash, upToBlock uint64) (*store.UnsyncedTopics, error) {
+	result := store.NewUnsyncedTopics()
 
 	// For each address-topic combination, check if there's complete coverage up to upToBlock
 	for i, address := range addresses {
 		addressTopics := topics[i]
-		unsyncedTopics := []common.Hash{}
 
 		for _, topic := range addressTopics {
 			// Query topic coverage for this address-topic combination
@@ -99,12 +98,16 @@ func (s *LogStore) GetUnsyncedTopics(ctx context.Context, addresses []common.Add
 			// Check if there's a gap in coverage from 0 to upToBlock
 			// We need continuous coverage from 0 to upToBlock
 			if !s.hasCompleteCoverage(dbCoverages, 0, upToBlock) {
-				unsyncedTopics = append(unsyncedTopics, topic)
-			}
-		}
+				var coverage store.CoverageRange
+				if len(dbCoverages) > 0 {
+					coverage = store.CoverageRange{
+						FromBlock: dbCoverages[0].FromBlock,
+						ToBlock:   dbCoverages[len(dbCoverages)-1].ToBlock,
+					}
+				}
 
-		if len(unsyncedTopics) > 0 {
-			result[address] = unsyncedTopics
+				result.AddTopic(address, topic, coverage)
+			}
 		}
 	}
 

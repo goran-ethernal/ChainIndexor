@@ -273,15 +273,13 @@ func TestLogStore_GetUnsyncedTopics(t *testing.T) {
 	require.NoError(t, err)
 
 	// address1 should have topic2 and topic3 as unsynced
-	require.Contains(t, unsynced, address1)
-	require.Len(t, unsynced[address1], 2)
-	require.Contains(t, unsynced[address1], topic2)
-	require.Contains(t, unsynced[address1], topic3)
+	require.True(t, unsynced.ContainsAddress(address1))
+	require.True(t, unsynced.ContainsTopic(address1, topic2))
+	require.True(t, unsynced.ContainsTopic(address1, topic3))
 
 	// address2 should have topic1 as unsynced (nothing stored)
-	require.Contains(t, unsynced, address2)
-	require.Len(t, unsynced[address2], 1)
-	require.Contains(t, unsynced[address2], topic1)
+	require.True(t, unsynced.ContainsAddress(address2))
+	require.True(t, unsynced.ContainsTopic(address2, topic1))
 }
 
 func TestLogStore_GetUnsyncedTopics_CompleteCoverage(t *testing.T) {
@@ -307,7 +305,7 @@ func TestLogStore_GetUnsyncedTopics_CompleteCoverage(t *testing.T) {
 	require.NoError(t, err)
 
 	// Should not have any unsynced topics
-	require.Empty(t, unsynced)
+	require.True(t, unsynced.IsEmpty(), "there should be no unsynced topics")
 }
 
 func TestLogStore_HandleReorg_ClearsTopicCoverage(t *testing.T) {
@@ -330,7 +328,7 @@ func TestLogStore_HandleReorg_ClearsTopicCoverage(t *testing.T) {
 	topics := [][]common.Hash{{topic}}
 	unsynced, err := store.GetUnsyncedTopics(ctx, addresses, topics, 100)
 	require.NoError(t, err)
-	require.Empty(t, unsynced, "topic should be fully synced")
+	require.True(t, unsynced.IsEmpty(), "topic should be fully synced")
 
 	// Handle reorg from block 50
 	err = store.HandleReorg(ctx, 50)
@@ -339,8 +337,8 @@ func TestLogStore_HandleReorg_ClearsTopicCoverage(t *testing.T) {
 	// Now topic should be unsynced from 50-100
 	unsynced, err = store.GetUnsyncedTopics(ctx, addresses, topics, 100)
 	require.NoError(t, err)
-	require.Contains(t, unsynced, address)
-	require.Contains(t, unsynced[address], topic, "topic should be unsynced after reorg")
+	require.True(t, unsynced.ContainsAddress(address), "should have unsynced topics for 150-200")
+	require.True(t, unsynced.ContainsTopic(address, topic), "topic should be unsynced after reorg")
 }
 
 func TestLogStore_HandleReorg_TruncatesSpanningRanges(t *testing.T) {
@@ -393,8 +391,8 @@ func TestLogStore_HandleReorg_TruncatesSpanningRanges(t *testing.T) {
 	topics := [][]common.Hash{{topic}}
 	unsynced, err := store.GetUnsyncedTopics(ctx, addresses, topics, 200)
 	require.NoError(t, err)
-	require.Contains(t, unsynced, address, "should have unsynced topics for 150-200")
-	require.Contains(t, unsynced[address], topic)
+	require.True(t, unsynced.ContainsAddress(address), "should have unsynced topics for 150-200")
+	require.True(t, unsynced.ContainsTopic(address, topic), "topic should be unsynced after reorg")
 
 	// Re-fetch blocks 150-200
 	logs3 := []types.Log{
@@ -417,7 +415,7 @@ func TestLogStore_HandleReorg_TruncatesSpanningRanges(t *testing.T) {
 	// Topic coverage should now be complete
 	unsynced, err = store.GetUnsyncedTopics(ctx, addresses, topics, 200)
 	require.NoError(t, err)
-	require.Empty(t, unsynced, "all topics should be synced after re-fetch")
+	require.True(t, unsynced.IsEmpty(), "all topics should be synced after re-fetch")
 }
 
 func TestIsCovered(t *testing.T) {

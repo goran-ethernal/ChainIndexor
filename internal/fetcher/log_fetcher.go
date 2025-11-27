@@ -79,6 +79,15 @@ func (lf *LogFetcher) GetMode() FetchMode {
 // FetchRange fetches logs and headers for a specific block range.
 // It verifies consistency using the ReorgDetector and returns an error if a reorg is detected.
 func (lf *LogFetcher) FetchRange(ctx context.Context, fromBlock, toBlock uint64) (*FetchResult, error) {
+	return lf.fetchRange(ctx, fromBlock, toBlock, lf.cfg.Addresses, lf.cfg.Topics)
+}
+
+func (lf *LogFetcher) fetchRange(
+	ctx context.Context,
+	fromBlock, toBlock uint64,
+	addresses []common.Address,
+	topics [][]common.Hash,
+) (*FetchResult, error) {
 	lf.log.Debugw("fetching range",
 		"from_block", fromBlock,
 		"to_block", toBlock,
@@ -86,10 +95,10 @@ func (lf *LogFetcher) FetchRange(ctx context.Context, fromBlock, toBlock uint64)
 	)
 
 	// Build dynamic filter with only addresses that have reached their start block
-	activeAddresses := make([]common.Address, 0, len(lf.cfg.Addresses))
-	activeTopics := make([][]common.Hash, 0, len(lf.cfg.Topics))
+	activeAddresses := make([]common.Address, 0, len(addresses))
+	activeTopics := make([][]common.Hash, 0, len(topics))
 
-	for i, addr := range lf.cfg.Addresses {
+	for i, addr := range addresses {
 		startBlock, exists := lf.cfg.AddressStartBlocks[addr]
 		// Include address if:
 		// 1. No start block is configured (shouldn't happen but be safe), OR
@@ -181,10 +190,13 @@ func (lf *LogFetcher) FetchRange(ctx context.Context, fromBlock, toBlock uint64)
 // FetchNext fetches the next chunk of logs based on the current mode.
 // For backfill mode, it fetches from the given block up to chunk_size.
 // For live mode, it fetches new blocks since the last checkpoint.
-func (lf *LogFetcher) FetchNext(ctx context.Context, lastIndexedBlock uint64) (*FetchResult, error) {
+func (lf *LogFetcher) FetchNext(
+	ctx context.Context,
+	lastIndexedBlock uint64,
+	downloaderStartBlock uint64) (*FetchResult, error) {
 	switch lf.mode {
 	case ModeBackfill:
-		return lf.fetchBackfill(ctx, lastIndexedBlock)
+		return lf.fetchBackfill(ctx, lastIndexedBlock, downloaderStartBlock)
 	case ModeLive:
 		return lf.fetchLive(ctx, lastIndexedBlock)
 	default:
@@ -193,7 +205,33 @@ func (lf *LogFetcher) FetchNext(ctx context.Context, lastIndexedBlock uint64) (*
 }
 
 // fetchBackfill fetches historical blocks in chunks.
-func (lf *LogFetcher) fetchBackfill(ctx context.Context, lastIndexedBlock uint64) (*FetchResult, error) {
+func (lf *LogFetcher) fetchBackfill(
+	ctx context.Context,
+	lastIndexedBlock uint64,
+	downloaderStartBlock uint64,
+) (*FetchResult, error) {
+	// check first if there are any unsynced logs
+	// its the logs for indexers that just joined or want to backfill missed logs
+	nonSyncedLogs, err := lf.logStore.GetUnsyncedTopics(ctx, lf.cfg.Addresses, lf.cfg.Topics, lastIndexedBlock)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get unsynced topics: %w", err)
+	}
+
+	if !nonSyncedLogs.IsEmpty() {
+		lf.log.Info("found unsynced logs, syncing them first")
+
+		unsyncedAddresses, unsyncedTopics, lastCoveredBlock := nonSyncedLogs.GetAddressesAndTopics()
+		fromBlock := max(downloaderStartBlock, lastCoveredBlock+1)     // if we already synced past downloaderStartBlock, start from lastIndexedBlock+1
+		toBlock := min(fromBlock+lf.cfg.ChunkSize-1, lastIndexedBlock) // Don't fetch beyond last indexed block
+		return lf.fetchRange(
+			ctx,
+			fromBlock,
+			toBlock,
+			unsyncedAddresses,
+			unsyncedTopics,
+		)
+	}
+
 	// Get the current finalized block
 	finalizedBlock, err := lf.getFinalizedBlock(ctx)
 	if err != nil {
@@ -201,7 +239,6 @@ func (lf *LogFetcher) fetchBackfill(ctx context.Context, lastIndexedBlock uint64
 	}
 
 	fromBlock := lastIndexedBlock + 1
-	// Don't fetch beyond finalized block
 	toBlock := min(fromBlock+lf.cfg.ChunkSize-1, finalizedBlock)
 
 	// Check if we've caught up
