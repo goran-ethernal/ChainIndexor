@@ -1,3 +1,4 @@
+//nolint:dupl
 package db
 
 import (
@@ -23,7 +24,10 @@ func (a AddressMeddler) PreRead(fieldAddr interface{}) (scanTarget interface{}, 
 
 func (a AddressMeddler) PostRead(fieldAddr, scanTarget interface{}) error {
 	// Convert the scanned string to common.Address
-	ns := scanTarget.(*sql.NullString)
+	ns, ok := scanTarget.(*sql.NullString)
+	if !ok {
+		return fmt.Errorf("expected *sql.NullString, got %T", scanTarget)
+	}
 
 	// Handle pointer to common.Address
 	if ptr, ok := fieldAddr.(**common.Address); ok {

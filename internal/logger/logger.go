@@ -53,7 +53,7 @@ func NewNopLogger() *Logger {
 
 // WithComponent creates a child logger with a component name field.
 func (l *Logger) WithComponent(component string) *Logger {
-	return &Logger{SugaredLogger: l.SugaredLogger.With("component", component)}
+	return &Logger{SugaredLogger: l.With("component", component)}
 }
 
 // Close flushes any buffered log entries.

@@ -1,3 +1,4 @@
+//nolint:dupl
 package db
 
 import (
@@ -23,7 +24,10 @@ func (h HashMeddler) PreRead(fieldAddr interface{}) (scanTarget interface{}, err
 
 func (h HashMeddler) PostRead(fieldAddr, scanTarget interface{}) error {
 	// Convert the scanned string to common.Hash
-	ns := scanTarget.(*sql.NullString)
+	ns, ok := scanTarget.(*sql.NullString)
+	if !ok {
+		return fmt.Errorf("expected *sql.NullString, got %T", scanTarget)
+	}
 
 	// Handle pointer to common.Hash
 	if ptr, ok := fieldAddr.(**common.Hash); ok {

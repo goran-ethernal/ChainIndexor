@@ -9,9 +9,14 @@ import (
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/ethereum/go-ethereum/rpc"
+	pkgrpc "github.com/goran-ethernal/ChainIndexor/pkg/rpc"
 )
 
+// Compile-time check to ensure Client implements pkgrpc.EthClient interface.
+var _ pkgrpc.EthClient = (*Client)(nil)
+
 // Client wraps the Ethereum RPC client with convenience methods for indexing.
+// It implements the pkgrpc.EthClient interface.
 type Client struct {
 	eth *ethclient.Client
 	rpc *rpc.Client

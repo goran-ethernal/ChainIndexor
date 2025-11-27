@@ -49,16 +49,16 @@ func New(
 	log *logger.Logger,
 ) (*Downloader, error) {
 	if rpcClient == nil {
-		return nil, errors.New("RPC client is required")
+		return nil, errors.New("rpc client is required")
 	}
 	if reorgDetector == nil {
-		return nil, errors.New("ReorgDetector is required")
+		return nil, errors.New("reorgDetector is required")
 	}
 	if syncManager == nil {
-		return nil, errors.New("SyncManager is required")
+		return nil, errors.New("syncManager is required")
 	}
 	if log == nil {
-		return nil, errors.New("Logger is required")
+		return nil, errors.New("logger is required")
 	}
 
 	d := &Downloader{
@@ -229,7 +229,7 @@ func (d *Downloader) Download(ctx context.Context) error {
 		result, err := d.logFetcher.FetchNext(ctx, lastIndexedBlock, downloaderStartBlock)
 		if err != nil {
 			// Check if this is a reorg error
-			var reorgErr *reorg.ErrReorgDetected
+			var reorgErr *reorg.ReorgDetectedError
 			if errors.As(err, &reorgErr) {
 				d.log.Warnw("reorg detected, initiating rollback",
 					"block", reorgErr.FirstReorgBlock,

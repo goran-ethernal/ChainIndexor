@@ -158,12 +158,12 @@ func TestReorgErrorDetection(t *testing.T) {
 		},
 		{
 			name:    "reorg detected error",
-			err:     &reorg.ErrReorgDetected{FirstReorgBlock: 100, Details: "test"},
+			err:     &reorg.ReorgDetectedError{FirstReorgBlock: 100, Details: "test"},
 			isReorg: true,
 		},
 		{
 			name:    "wrapped reorg error",
-			err:     fmt.Errorf("fetch failed: %w", &reorg.ErrReorgDetected{FirstReorgBlock: 200, Details: "wrapped"}),
+			err:     fmt.Errorf("fetch failed: %w", &reorg.ReorgDetectedError{FirstReorgBlock: 200, Details: "wrapped"}),
 			isReorg: true,
 		},
 		{
@@ -175,7 +175,7 @@ func TestReorgErrorDetection(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			var reorgErr *reorg.ErrReorgDetected
+			var reorgErr *reorg.ReorgDetectedError
 			result := errors.As(tt.err, &reorgErr)
 			require.Equal(t, tt.isReorg, result)
 		})
