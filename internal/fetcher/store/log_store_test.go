@@ -537,3 +537,179 @@ func TestGetMissingRanges(t *testing.T) {
 		})
 	}
 }
+
+func TestLogStore_Close(t *testing.T) {
+	store, cleanup := setupTestLogStore(t)
+	defer cleanup()
+
+	// Close should not return an error
+	err := store.Close()
+	require.NoError(t, err)
+}
+
+func TestLogStore_TopicConversion(t *testing.T) {
+	store, cleanup := setupTestLogStore(t)
+	defer cleanup()
+
+	ctx := context.Background()
+	address := common.HexToAddress("0x1234567890123456789012345678901234567890")
+
+	tests := []struct {
+		name   string
+		topics []common.Hash
+	}{
+		{
+			name:   "no topics",
+			topics: []common.Hash{},
+		},
+		{
+			name:   "one topic",
+			topics: []common.Hash{common.HexToHash("0x1111")},
+		},
+		{
+			name: "two topics",
+			topics: []common.Hash{
+				common.HexToHash("0x1111"),
+				common.HexToHash("0x2222"),
+			},
+		},
+		{
+			name: "three topics",
+			topics: []common.Hash{
+				common.HexToHash("0x1111"),
+				common.HexToHash("0x2222"),
+				common.HexToHash("0x3333"),
+			},
+		},
+		{
+			name: "four topics (max)",
+			topics: []common.Hash{
+				common.HexToHash("0x1111"),
+				common.HexToHash("0x2222"),
+				common.HexToHash("0x3333"),
+				common.HexToHash("0x4444"),
+			},
+		},
+	}
+
+	for i, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Create a log with the specified number of topics
+			log := types.Log{
+				Address:     address,
+				Topics:      tt.topics,
+				Data:        []byte{0x01, 0x02, 0x03},
+				BlockNumber: 100 + uint64(i), // Use different block numbers to avoid conflicts
+				BlockHash:   common.HexToHash("0xabcdef"),
+				TxHash:      common.HexToHash("0xffffff"),
+				TxIndex:     0,
+				Index:       0,
+			}
+
+			// Store and retrieve the log
+			topicFilter := []common.Hash{}
+			if len(tt.topics) > 0 {
+				topicFilter = []common.Hash{tt.topics[0]}
+			}
+
+			err := store.StoreLogs(ctx, address, topicFilter, log.BlockNumber, log.BlockNumber, []types.Log{log})
+			require.NoError(t, err)
+
+			// Retrieve and verify topics are preserved correctly
+			retrievedLogs, _, err := store.GetLogs(ctx, address, log.BlockNumber, log.BlockNumber)
+			require.NoError(t, err)
+			require.Len(t, retrievedLogs, 1)
+			require.Equal(t, tt.topics, retrievedLogs[0].Topics, "topics should be preserved")
+		})
+	}
+}
+
+func TestLogStore_StoreLogs_EmptyLogs(t *testing.T) {
+	store, cleanup := setupTestLogStore(t)
+	defer cleanup()
+
+	ctx := context.Background()
+	address := common.HexToAddress("0x1234567890123456789012345678901234567890")
+	topic := common.HexToHash("0x1234")
+
+	// Store empty logs (important for coverage tracking)
+	err := store.StoreLogs(ctx, address, []common.Hash{topic}, 100, 105, []types.Log{})
+	require.NoError(t, err)
+
+	// Coverage should still be recorded
+	_, coverage, err := store.GetLogs(ctx, address, 100, 105)
+	require.NoError(t, err)
+	require.Len(t, coverage, 1)
+	require.Equal(t, uint64(100), coverage[0].FromBlock)
+	require.Equal(t, uint64(105), coverage[0].ToBlock)
+}
+
+func TestLogStore_StoreLogs_DuplicateLogs(t *testing.T) {
+	store, cleanup := setupTestLogStore(t)
+	defer cleanup()
+
+	ctx := context.Background()
+	address := common.HexToAddress("0x1234567890123456789012345678901234567890")
+	topic := common.HexToHash("0x1234")
+
+	logs := []types.Log{
+		createTestLog(address, 100, common.HexToHash("0xaaa"), 0),
+		createTestLog(address, 101, common.HexToHash("0xbbb"), 0),
+	}
+
+	// Store logs first time
+	err := store.StoreLogs(ctx, address, []common.Hash{topic}, 100, 101, logs)
+	require.NoError(t, err)
+
+	// Store same logs again (should be ignored due to UNIQUE constraint)
+	err = store.StoreLogs(ctx, address, []common.Hash{topic}, 100, 101, logs)
+	require.NoError(t, err)
+
+	// Should still only have 2 logs
+	retrievedLogs, _, err := store.GetLogs(ctx, address, 100, 101)
+	require.NoError(t, err)
+	require.Len(t, retrievedLogs, 2)
+}
+
+func TestLogStore_MultipleTopics(t *testing.T) {
+	store, cleanup := setupTestLogStore(t)
+	defer cleanup()
+
+	ctx := context.Background()
+	address := common.HexToAddress("0x1234567890123456789012345678901234567890")
+	topic1 := common.HexToHash("0x1111")
+	topic2 := common.HexToHash("0x2222")
+
+	// Store logs with multiple topics in the filter
+	logs := []types.Log{
+		createTestLog(address, 100, common.HexToHash("0xaaa"), 0),
+	}
+
+	err := store.StoreLogs(ctx, address, []common.Hash{topic1, topic2}, 0, 100, logs)
+	require.NoError(t, err)
+
+	// Check that both topics are tracked in coverage
+	addresses := []common.Address{address}
+	topics := [][]common.Hash{{topic1, topic2}}
+
+	unsynced, err := store.GetUnsyncedTopics(ctx, addresses, topics, 100)
+	require.NoError(t, err)
+
+	// Both topics should be synced now
+	require.False(t, unsynced.ContainsTopic(address, topic1), "topic1 should be synced")
+	require.False(t, unsynced.ContainsTopic(address, topic2), "topic2 should be synced")
+}
+
+func TestLogStore_GetLogs_NoCoverage(t *testing.T) {
+	store, cleanup := setupTestLogStore(t)
+	defer cleanup()
+
+	ctx := context.Background()
+	address := common.HexToAddress("0x1234567890123456789012345678901234567890")
+
+	// Query without storing anything
+	logs, coverage, err := store.GetLogs(ctx, address, 100, 110)
+	require.NoError(t, err)
+	require.Len(t, logs, 0)
+	require.Len(t, coverage, 0)
+}
