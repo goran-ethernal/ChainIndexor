@@ -1,6 +1,5 @@
 [downloader]
 rpc_url = "https://mainnet.infura.io/v3/XXXX"
-start_block = 17000000
 chunk_size = 5000
 finality = "finalized"
 finalized_lag = 12
@@ -17,6 +16,7 @@ enable_foreign_keys = true
 
 [[indexers]]
 name = "MyTokenIndexer"
+start_block = 17000000
 db = { path = "./data/mytokenindexer.sqlite", journal_mode = "WAL", synchronous = "NORMAL", busy_timeout = 5000, cache_size = 10000, max_open_connections = 25, max_idle_connections = 5, enable_foreign_keys = true }
 
 [[indexers.contracts]]

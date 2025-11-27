@@ -4,15 +4,19 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"sync"
 
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/goran-ethernal/ChainIndexor/internal/fetcher"
+	"github.com/goran-ethernal/ChainIndexor/internal/fetcher/store"
+	"github.com/goran-ethernal/ChainIndexor/internal/indexer"
 	"github.com/goran-ethernal/ChainIndexor/internal/logger"
+	"github.com/goran-ethernal/ChainIndexor/internal/reorg"
 	"github.com/goran-ethernal/ChainIndexor/internal/rpc"
 	"github.com/goran-ethernal/ChainIndexor/internal/types"
 	"github.com/goran-ethernal/ChainIndexor/pkg/config"
-	"github.com/goran-ethernal/ChainIndexor/pkg/indexer"
-	"github.com/goran-ethernal/ChainIndexor/pkg/reorg"
+	idx "github.com/goran-ethernal/ChainIndexor/pkg/indexer"
 )
 
 // Downloader orchestrates the log downloading process.
@@ -25,12 +29,15 @@ type Downloader struct {
 	syncManager   *SyncManager
 	log           *logger.Logger
 	coordinator   *indexer.IndexerCoordinator
-	logFetcher    *LogFetcher
+	logFetcher    *fetcher.LogFetcher
 
 	// Filter configuration built from registered indexers
 	mu        sync.RWMutex
 	addresses []common.Address
 	topics    [][]common.Hash
+
+	// Per-address start blocks (minimum across all indexers for that address)
+	addressStartBlocks map[common.Address]uint64
 }
 
 // New creates a new Downloader instance.
@@ -55,14 +62,15 @@ func New(
 	}
 
 	d := &Downloader{
-		cfg:           cfg,
-		rpc:           rpcClient,
-		reorgDetector: reorgDetector,
-		syncManager:   syncManager,
-		log:           log.WithComponent("downloader"),
-		coordinator:   indexer.NewIndexerCoordinator(),
-		addresses:     make([]common.Address, 0),
-		topics:        make([][]common.Hash, 0),
+		cfg:                cfg,
+		rpc:                rpcClient,
+		reorgDetector:      reorgDetector,
+		syncManager:        syncManager,
+		log:                log.WithComponent("downloader"),
+		coordinator:        indexer.NewIndexerCoordinator(),
+		addresses:          make([]common.Address, 0),
+		topics:             make([][]common.Hash, 0),
+		addressStartBlocks: make(map[common.Address]uint64),
 	}
 
 	d.log.Info("downloader initialized")
@@ -73,11 +81,14 @@ func New(
 // RegisterIndexer registers an indexer to receive logs.
 // The downloader will use the indexer's EventsToIndex method to determine
 // which logs to fetch and forward.
-func (d *Downloader) RegisterIndexer(idx indexer.Indexer) {
+func (d *Downloader) RegisterIndexer(idx idx.Indexer) {
 	d.log.Infow("registering indexer", "indexer", fmt.Sprintf("%T", idx))
 
 	// Get the events this indexer wants
 	eventsToIndex := idx.EventsToIndex()
+
+	// Get the start block for this indexer
+	startBlock := idx.StartBlock()
 
 	// Extract addresses and topics
 	allTopics := make([]common.Hash, 0)
@@ -87,6 +98,11 @@ func (d *Downloader) RegisterIndexer(idx indexer.Indexer) {
 
 	addressesIndex := make(map[common.Address]int, len(eventsToIndex))
 	for addr, topicSet := range eventsToIndex {
+		// Update the minimum start block for this address
+		if existingStartBlock, exists := d.addressStartBlocks[addr]; !exists || startBlock < existingStartBlock {
+			d.addressStartBlocks[addr] = startBlock
+		}
+
 		// Add address to filter (avoid duplicates)
 		index := d.indexOfAddressLocked(addr)
 		if index == -1 {
@@ -113,21 +129,34 @@ func (d *Downloader) RegisterIndexer(idx indexer.Indexer) {
 		}
 	}
 
-	totalTopics := 0
-	if len(d.topics) > 0 {
-		totalTopics = len(d.topics[0])
-	}
-
 	// Register with coordinator (outside of lock to avoid potential deadlock)
 	d.coordinator.RegisterIndexer(idx)
 
 	d.log.Infow("indexer registered",
 		"indexer", fmt.Sprintf("%T", idx),
-		"addresses", len(eventsToIndex),
-		"topics", len(allTopics),
+		"start_block", startBlock,
 		"total_addresses", len(d.addresses),
-		"total_topics", totalTopics,
+		"total_topics", len(allTopics),
 	)
+}
+
+func (d *Downloader) getDownloaderStartBlock() uint64 {
+	d.mu.RLock()
+	defer d.mu.RUnlock()
+
+	// Determine the minimum start block from all registered indexers
+	minStartBlock := uint64(0)
+	indexerStartBlocks := d.coordinator.IndexerStartBlocks()
+	if len(indexerStartBlocks) > 0 {
+		minStartBlock = ^uint64(0) // Max uint64
+		for _, startBlock := range indexerStartBlocks {
+			if startBlock < minStartBlock {
+				minStartBlock = startBlock
+			}
+		}
+	}
+
+	return minStartBlock
 }
 
 // Download starts the download process, streaming logs to registered indexers.
@@ -143,6 +172,7 @@ func (d *Downloader) Download(ctx context.Context) error {
 
 	// Initialize LogFetcher with filter configuration
 	d.mu.RLock()
+
 	addresses := make([]common.Address, len(d.addresses))
 	copy(addresses, d.addresses)
 	topics := make([][]common.Hash, len(d.topics))
@@ -150,15 +180,23 @@ func (d *Downloader) Download(ctx context.Context) error {
 		topics[i] = make([]common.Hash, len(topicSlice))
 		copy(topics[i], topicSlice)
 	}
+	// Copy addressStartBlocks map
+	addressStartBlocks := make(map[common.Address]uint64, len(d.addressStartBlocks))
+	maps.Copy(addressStartBlocks, d.addressStartBlocks)
+
 	d.mu.RUnlock()
 
-	d.logFetcher = NewLogFetcher(LogFetcherConfig{
-		ChunkSize:    d.cfg.ChunkSize,
-		Finality:     finality,
-		FinalizedLag: d.cfg.FinalizedLag,
-		Addresses:    addresses,
-		Topics:       topics,
-	}, d.rpc, d.reorgDetector, d.log)
+	// Create LogStore using the sync manager's database connection
+	logStore := store.NewLogStore(d.syncManager.DB(), d.log)
+
+	d.logFetcher = fetcher.NewLogFetcher(fetcher.LogFetcherConfig{
+		ChunkSize:          d.cfg.ChunkSize,
+		Finality:           finality,
+		FinalizedLag:       d.cfg.FinalizedLag,
+		Addresses:          addresses,
+		Topics:             topics,
+		AddressStartBlocks: addressStartBlocks,
+	}, d.log, d.rpc, d.reorgDetector, logStore)
 
 	// Get current sync state
 	state, err := d.syncManager.GetState()
@@ -166,17 +204,17 @@ func (d *Downloader) Download(ctx context.Context) error {
 		return fmt.Errorf("failed to get sync state: %w", err)
 	}
 
-	// Initialize from saved state or start from beginning
-	lastBlock := state.LastIndexedBlock
-	if lastBlock == 0 {
-		lastBlock = d.cfg.StartBlock
-		d.log.Infow("starting fresh download", "start_block", lastBlock)
+	// Initialize from saved state or start from the earliest indexer start block
+	lastIndexedBlock := state.LastIndexedBlock
+	downloaderStartBlock := d.getDownloaderStartBlock()
+	if lastIndexedBlock == 0 {
+		lastIndexedBlock = downloaderStartBlock - 1
+		d.log.Infow("starting fresh download", "start_block", lastIndexedBlock)
 	} else {
-		d.log.Infow("resuming download", "last_indexed_block", lastBlock)
+		d.log.Infow("resuming download", "last_indexed_block", lastIndexedBlock)
 	}
 
-	// Set LogFetcher mode based on saved state
-	d.logFetcher.SetMode(state.GetMode())
+	d.logFetcher.SetMode(fetcher.ModeBackfill) // Always start in backfill mode
 
 	// Main download loop
 	for {
@@ -188,7 +226,7 @@ func (d *Downloader) Download(ctx context.Context) error {
 		}
 
 		// Fetch next chunk
-		result, err := d.logFetcher.FetchNext(ctx, lastBlock)
+		result, err := d.logFetcher.FetchNext(ctx, lastIndexedBlock, downloaderStartBlock)
 		if err != nil {
 			// Check if this is a reorg error
 			var reorgErr *reorg.ErrReorgDetected
@@ -205,12 +243,12 @@ func (d *Downloader) Download(ctx context.Context) error {
 				if err != nil {
 					return fmt.Errorf("failed to get state after reorg: %w", err)
 				}
-				lastBlock = state.LastIndexedBlock
+				lastIndexedBlock = state.LastIndexedBlock
 				continue
 			}
 
 			// Not a reorg error, it's a real failure
-			d.log.Errorw("failed to fetch logs", "error", err, "last_block", lastBlock)
+			d.log.Errorw("failed to fetch logs", "error", err, "last_block", lastIndexedBlock)
 			return fmt.Errorf("failed to fetch logs: %w", err)
 		}
 
@@ -228,26 +266,36 @@ func (d *Downloader) Download(ctx context.Context) error {
 		}
 
 		// Save checkpoint with the last block's hash
-		// Use the hash of the last block in the range
-		lastHeader := result.Headers[len(result.Headers)-1]
-		blockHash := lastHeader.Hash()
+		// Only update if we've progressed past the last saved block
+		// We can receive blocks from already indexed ranges
+		// due to new indexers being added with earlier start blocks
+		if state.LastIndexedBlock <= result.FromBlock {
+			lastHeader := result.Headers[len(result.Headers)-1]
+			blockHash := lastHeader.Hash()
 
-		if err := d.syncManager.SaveCheckpoint(
-			result.ToBlock,
-			blockHash,
-			d.logFetcher.GetMode(),
-		); err != nil {
-			return fmt.Errorf("failed to save checkpoint: %w", err)
+			if err := d.syncManager.SaveCheckpoint(
+				result.ToBlock,
+				blockHash,
+				d.logFetcher.GetMode(),
+			); err != nil {
+				return fmt.Errorf("failed to save checkpoint: %w", err)
+			}
+
+			lastIndexedBlock = result.ToBlock
+
+			d.log.Infow("checkpoint saved",
+				"block", lastIndexedBlock,
+				"block_hash", blockHash.Hex(),
+				"mode", d.logFetcher.GetMode(),
+				"logs_processed", len(result.Logs),
+			)
 		}
 
-		lastBlock = result.ToBlock
-
-		d.log.Infow("checkpoint saved",
-			"block", lastBlock,
-			"block_hash", blockHash.Hex(),
-			"mode", d.logFetcher.GetMode(),
-			"logs_processed", len(result.Logs),
-		)
+		// Get new state
+		state, err = d.syncManager.GetState()
+		if err != nil {
+			return fmt.Errorf("failed to get sync state: %w", err)
+		}
 	}
 }
 
@@ -268,11 +316,11 @@ func (d *Downloader) handleReorg(firstReorgBlock uint64) error {
 	}
 
 	// Switch back to backfill mode to re-process the affected range
-	if err := d.syncManager.SetMode(ModeBackfill); err != nil {
+	if err := d.syncManager.SetMode(fetcher.ModeBackfill); err != nil {
 		return fmt.Errorf("failed to set mode after reorg: %w", err)
 	}
 
-	d.logFetcher.SetMode(ModeBackfill)
+	d.logFetcher.SetMode(fetcher.ModeBackfill)
 
 	d.log.Infow("reorg handled, resuming from safe block", "block", rollbackTo)
 

@@ -16,9 +16,6 @@ type DownloaderConfig struct {
 	// RPCURL is the Ethereum RPC endpoint URL
 	RPCURL string `yaml:"rpc_url" json:"rpc_url" toml:"rpc_url"`
 
-	// StartBlock is the block number to start backfilling from
-	StartBlock uint64 `yaml:"start_block" json:"start_block" toml:"start_block"`
-
 	// ChunkSize is the block range per eth_getLogs call
 	ChunkSize uint64 `yaml:"chunk_size" json:"chunk_size" toml:"chunk_size"`
 
@@ -103,6 +100,9 @@ func (d *DatabaseConfig) ApplyDefaults() {
 type IndexerConfig struct {
 	// Name is a unique identifier for this indexer
 	Name string `yaml:"name" json:"name" toml:"name"`
+
+	// StartBlock is the block number to start indexing from
+	StartBlock uint64 `yaml:"start_block" json:"start_block" toml:"start_block"`
 
 	// DB contains database configuration for the indexer
 	DB DatabaseConfig `yaml:"db" json:"db" toml:"db"`

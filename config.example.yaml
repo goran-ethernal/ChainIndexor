@@ -1,6 +1,5 @@
 downloader:
   rpc_url: "https://mainnet.infura.io/v3/XXXX"
-  start_block: 17000000          # where to start backfill
   chunk_size: 5000               # block range per eth_getLogs call
   finality: "finalized"          # "finalized", "safe", or "latest"
   db:
@@ -15,6 +14,7 @@ downloader:
 
 indexers:
   - name: "MyTokenIndexer"
+    start_block: 17000000        # block to start indexing from
     db:
       path: "./data/mytokenindexer.sqlite"
       journal_mode: "WAL"
