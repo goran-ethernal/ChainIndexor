@@ -5,8 +5,8 @@ import (
 	"testing"
 
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/goran-ethernal/ChainIndexor/internal/fetcher"
 	"github.com/goran-ethernal/ChainIndexor/internal/logger"
+	"github.com/goran-ethernal/ChainIndexor/pkg/fetcher"
 	"github.com/stretchr/testify/require"
 )
 

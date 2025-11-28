@@ -11,11 +11,15 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/goran-ethernal/ChainIndexor/internal/logger"
-	"github.com/goran-ethernal/ChainIndexor/internal/reorg"
-	"github.com/goran-ethernal/ChainIndexor/internal/rpc"
 	itypes "github.com/goran-ethernal/ChainIndexor/internal/types"
+	"github.com/goran-ethernal/ChainIndexor/pkg/fetcher"
 	"github.com/goran-ethernal/ChainIndexor/pkg/fetcher/store"
+	"github.com/goran-ethernal/ChainIndexor/pkg/reorg"
+	"github.com/goran-ethernal/ChainIndexor/pkg/rpc"
 )
+
+// Compile-time check to ensure LogFetcher implements fetcher.LogFetcher interface.
+var _ fetcher.LogFetcher = (*LogFetcher)(nil)
 
 const ethereumBlockTime = 12 * time.Second
 
@@ -43,19 +47,19 @@ type LogFetcherConfig struct {
 // LogFetcher handles fetching logs and block headers from the blockchain.
 type LogFetcher struct {
 	cfg           LogFetcherConfig
-	rpc           *rpc.Client
-	reorgDetector *reorg.ReorgDetector
+	rpc           rpc.EthClient
+	reorgDetector reorg.Detector
 	logStore      store.LogStore
 	log           *logger.Logger
-	mode          FetchMode
+	mode          fetcher.FetchMode
 }
 
 // NewLogFetcher creates a new LogFetcher instance.
 func NewLogFetcher(
 	cfg LogFetcherConfig,
 	log *logger.Logger,
-	rpcClient *rpc.Client,
-	reorgDetector *reorg.ReorgDetector,
+	rpcClient rpc.EthClient,
+	reorgDetector reorg.Detector,
 	logStore store.LogStore,
 ) *LogFetcher {
 	return &LogFetcher{
@@ -64,24 +68,24 @@ func NewLogFetcher(
 		reorgDetector: reorgDetector,
 		logStore:      logStore,
 		log:           log.WithComponent("log-fetcher"),
-		mode:          ModeBackfill,
+		mode:          fetcher.ModeBackfill,
 	}
 }
 
 // SetMode changes the fetcher's operating mode.
-func (lf *LogFetcher) SetMode(mode FetchMode) {
+func (lf *LogFetcher) SetMode(mode fetcher.FetchMode) {
 	lf.log.Infow("switching fetch mode", "from", lf.mode, "to", mode)
 	lf.mode = mode
 }
 
 // GetMode returns the current operating mode.
-func (lf *LogFetcher) GetMode() FetchMode {
+func (lf *LogFetcher) GetMode() fetcher.FetchMode {
 	return lf.mode
 }
 
 // FetchRange fetches logs and headers for a specific block range.
 // It verifies consistency using the ReorgDetector and returns an error if a reorg is detected.
-func (lf *LogFetcher) FetchRange(ctx context.Context, fromBlock, toBlock uint64) (*FetchResult, error) {
+func (lf *LogFetcher) FetchRange(ctx context.Context, fromBlock, toBlock uint64) (*fetcher.FetchResult, error) {
 	return lf.fetchRange(ctx, fromBlock, toBlock, lf.cfg.Addresses, lf.cfg.Topics)
 }
 
@@ -90,7 +94,7 @@ func (lf *LogFetcher) fetchRange(
 	fromBlock, toBlock uint64,
 	addresses []common.Address,
 	topics [][]common.Hash,
-) (*FetchResult, error) {
+) (*fetcher.FetchResult, error) {
 	lf.log.Debugw("fetching range",
 		"from_block", fromBlock,
 		"to_block", toBlock,
@@ -183,7 +187,7 @@ func (lf *LogFetcher) fetchRange(
 		"blocks_count", len(headers),
 	)
 
-	return &FetchResult{
+	return &fetcher.FetchResult{
 		Logs:      logs,
 		Headers:   headers,
 		FromBlock: fromBlock,
@@ -197,11 +201,11 @@ func (lf *LogFetcher) fetchRange(
 func (lf *LogFetcher) FetchNext(
 	ctx context.Context,
 	lastIndexedBlock uint64,
-	downloaderStartBlock uint64) (*FetchResult, error) {
+	downloaderStartBlock uint64) (*fetcher.FetchResult, error) {
 	switch lf.mode {
-	case ModeBackfill:
+	case fetcher.ModeBackfill:
 		return lf.fetchBackfill(ctx, lastIndexedBlock, downloaderStartBlock)
-	case ModeLive:
+	case fetcher.ModeLive:
 		return lf.fetchLive(ctx, lastIndexedBlock)
 	default:
 		return nil, fmt.Errorf("unknown fetch mode: %s", lf.mode)
@@ -213,7 +217,7 @@ func (lf *LogFetcher) fetchBackfill(
 	ctx context.Context,
 	lastIndexedBlock uint64,
 	downloaderStartBlock uint64,
-) (*FetchResult, error) {
+) (*fetcher.FetchResult, error) {
 	// check first if there are any unsynced logs
 	// its the logs for indexers that just joined or want to backfill missed logs
 	nonSyncedLogs, err := lf.logStore.GetUnsyncedTopics(ctx, lf.cfg.Addresses, lf.cfg.Topics, lastIndexedBlock)
@@ -249,7 +253,7 @@ func (lf *LogFetcher) fetchBackfill(
 	// Check if we've caught up
 	if fromBlock > finalizedBlock {
 		lf.log.Info("backfill complete, switching to live mode")
-		lf.mode = ModeLive
+		lf.mode = fetcher.ModeLive
 		return lf.fetchLive(ctx, lastIndexedBlock)
 	}
 
@@ -257,7 +261,7 @@ func (lf *LogFetcher) fetchBackfill(
 }
 
 // fetchLive tails new blocks as they become finalized.
-func (lf *LogFetcher) fetchLive(ctx context.Context, lastIndexedBlock uint64) (*FetchResult, error) {
+func (lf *LogFetcher) fetchLive(ctx context.Context, lastIndexedBlock uint64) (*fetcher.FetchResult, error) {
 	// Get the current finalized block
 	finalizedBlock, err := lf.getFinalizedBlock(ctx)
 	if err != nil {

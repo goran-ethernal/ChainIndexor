@@ -128,7 +128,7 @@ func (r *ReorgDetector) VerifyAndRecordBlocks(ctx context.Context, logs []types.
 					"cached_hash", cachedHash.Hex(),
 					"current_hash", currentHash.Hex(),
 				)
-				return NewReorgError(header.Number.Uint64(),
+				return reorg.NewReorgError(header.Number.Uint64(),
 					fmt.Sprintf("cached_hash=%s current_hash=%s", cachedHash.Hex(), currentHash.Hex()))
 			}
 		}
@@ -166,7 +166,7 @@ func (r *ReorgDetector) VerifyAndRecordBlocks(ctx context.Context, logs []types.
 					"log_hash", logHash.Hex(),
 					"header_hash", headerHash.Hex(),
 				)
-				return NewReorgError(blockNum,
+				return reorg.NewReorgError(blockNum,
 					fmt.Sprintf("log_hash=%s header_hash=%s", logHash.Hex(), headerHash.Hex()))
 			}
 		}
@@ -185,7 +185,7 @@ func (r *ReorgDetector) VerifyAndRecordBlocks(ctx context.Context, logs []types.
 					"expected_parent", expectedParent.Hex(),
 					"actual_parent", actualParent.Hex(),
 				)
-				return NewReorgError(headers[i].Number.Uint64(),
+				return reorg.NewReorgError(headers[i].Number.Uint64(),
 					fmt.Sprintf("chain discontinuity between blocks %d and %d",
 						headers[i-1].Number.Uint64(), headers[i].Number.Uint64()))
 			}

@@ -8,36 +8,25 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/goran-ethernal/ChainIndexor/internal/db"
 	"github.com/goran-ethernal/ChainIndexor/internal/downloader/migrations"
-	"github.com/goran-ethernal/ChainIndexor/internal/fetcher"
 	"github.com/goran-ethernal/ChainIndexor/internal/logger"
+	pkgdownloader "github.com/goran-ethernal/ChainIndexor/pkg/downloader"
+	"github.com/goran-ethernal/ChainIndexor/pkg/fetcher"
 	"github.com/russross/meddler"
 )
 
+// Compile-time check to ensure SyncManager implements pkgdownloader.SyncManager interface.
+var _ pkgdownloader.SyncManager = (*SyncManager)(nil)
+
 // SyncManager manages the synchronization state and checkpoints.
+// It implements the pkgdownloader.SyncManager interface.
 type SyncManager struct {
 	db  *sql.DB
 	log *logger.Logger
 }
 
-// SyncState represents the current synchronization state.
+// SyncState is a type alias for the public SyncState type.
 // Uses meddler tags for automatic struct-to-db mapping.
-type SyncState struct {
-	ID                   int         `meddler:"id,pk" json:"-"`
-	LastIndexedBlock     uint64      `meddler:"last_indexed_block" json:"last_indexed_block"`
-	LastIndexedBlockHash common.Hash `meddler:"last_indexed_block_hash,hash" json:"last_indexed_block_hash"`
-	LastIndexedTimestamp int64       `meddler:"last_indexed_timestamp" json:"last_indexed_timestamp"`
-	Mode                 string      `meddler:"mode" json:"mode"`
-}
-
-// GetMode returns the Mode as a fetcher.FetchMode type.
-func (s *SyncState) GetMode() fetcher.FetchMode {
-	return fetcher.FetchMode(s.Mode)
-}
-
-// SetMode sets the Mode from a fetcher.FetchMode type.
-func (s *SyncState) SetMode(mode fetcher.FetchMode) {
-	s.Mode = string(mode)
-}
+type SyncState = pkgdownloader.SyncState
 
 // NewSyncManager creates a new SyncManager instance.
 func NewSyncManager(dbPath string, log *logger.Logger) (*SyncManager, error) {
