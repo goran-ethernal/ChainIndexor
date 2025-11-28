@@ -1,30 +1,46 @@
 # Label PRs based on files changed
-'test':
-  - '**/*_test.go'
-  - '.github/workflows/test.yml'
-  - '.github/workflows/ci.yml'
+test:
+  - changed-files:
+    - any-glob-to-any-file: '**/*_test.go'
+  - changed-files:
+    - any-glob-to-any-file: '.github/workflows/test.yml'
+  - changed-files:
+    - any-glob-to-any-file: '.github/workflows/ci.yml'
 
-'documentation':
-  - '**/*.md'
-  - 'docs/**/*'
+documentation:
+  - changed-files:
+    - any-glob-to-any-file: '**/*.md'
+  - changed-files:
+    - any-glob-to-any-file: 'docs/**/*'
 
-'dependencies':
-  - 'go.mod'
-  - 'go.sum'
+dependencies:
+  - changed-files:
+    - any-glob-to-any-file: 'go.mod'
+  - changed-files:
+    - any-glob-to-any-file: 'go.sum'
 
-'config':
-  - '*.yaml'
-  - '*.yml'
-  - '*.toml'
-  - '*.json'
-  - '.mockery.yaml'
+config:
+  - changed-files:
+    - any-glob-to-any-file: '*.yaml'
+  - changed-files:
+    - any-glob-to-any-file: '*.yml'
+  - changed-files:
+    - any-glob-to-any-file: '*.toml'
+  - changed-files:
+    - any-glob-to-any-file: '*.json'
+  - changed-files:
+    - any-glob-to-any-file: '.mockery.yaml'
 
-'internal':
-  - 'internal/**/*'
+internal:
+  - changed-files:
+    - any-glob-to-any-file: 'internal/**/*'
 
-'pkg':
-  - 'pkg/**/*'
+pkg:
+  - changed-files:
+    - any-glob-to-any-file: 'pkg/**/*'
 
-'ci/cd':
-  - '.github/**/*'
-  - 'Makefile'
+ci/cd:
+  - changed-files:
+    - any-glob-to-any-file: '.github/**/*'
+  - changed-files:
+    - any-glob-to-any-file: 'Makefile'
