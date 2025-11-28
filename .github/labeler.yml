@@ -1,0 +1,30 @@
+# Label PRs based on files changed
+'test':
+  - '**/*_test.go'
+  - '.github/workflows/test.yml'
+  - '.github/workflows/ci.yml'
+
+'documentation':
+  - '**/*.md'
+  - 'docs/**/*'
+
+'dependencies':
+  - 'go.mod'
+  - 'go.sum'
+
+'config':
+  - '*.yaml'
+  - '*.yml'
+  - '*.toml'
+  - '*.json'
+  - '.mockery.yaml'
+
+'internal':
+  - 'internal/**/*'
+
+'pkg':
+  - 'pkg/**/*'
+
+'ci/cd':
+  - '.github/**/*'
+  - 'Makefile'
