@@ -1,0 +1,46 @@
+# Label PRs based on files changed
+test:
+  - changed-files:
+    - any-glob-to-any-file: '**/*_test.go'
+  - changed-files:
+    - any-glob-to-any-file: '.github/workflows/test.yml'
+  - changed-files:
+    - any-glob-to-any-file: '.github/workflows/ci.yml'
+
+documentation:
+  - changed-files:
+    - any-glob-to-any-file: '**/*.md'
+  - changed-files:
+    - any-glob-to-any-file: 'docs/**/*'
+
+dependencies:
+  - changed-files:
+    - any-glob-to-any-file: 'go.mod'
+  - changed-files:
+    - any-glob-to-any-file: 'go.sum'
+
+config:
+  - changed-files:
+    - any-glob-to-any-file: '*.yaml'
+  - changed-files:
+    - any-glob-to-any-file: '*.yml'
+  - changed-files:
+    - any-glob-to-any-file: '*.toml'
+  - changed-files:
+    - any-glob-to-any-file: '*.json'
+  - changed-files:
+    - any-glob-to-any-file: '.mockery.yaml'
+
+internal:
+  - changed-files:
+    - any-glob-to-any-file: 'internal/**/*'
+
+pkg:
+  - changed-files:
+    - any-glob-to-any-file: 'pkg/**/*'
+
+ci/cd:
+  - changed-files:
+    - any-glob-to-any-file: '.github/**/*'
+  - changed-files:
+    - any-glob-to-any-file: 'Makefile'

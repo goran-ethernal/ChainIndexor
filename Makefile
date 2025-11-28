@@ -1,5 +1,14 @@
 COMMON_MOCKERY_PARAMS=--disable-version-string --with-expecter --exported
 
+.PHONY: help
+help: ## Display this help message
+	@echo "Available commands:"
+	@echo ""
+	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-20s\033[0m %s\n", $$1, $$2}'
+	@echo ""
+
+.DEFAULT_GOAL := help
+
 .PHONY: check-go
 check-go:
 	@which go > /dev/null || (echo "Go is not installed.. Please install and try again."; exit 1)
@@ -20,5 +29,59 @@ lint: ## Runs the linter
 	export "GOROOT=$$(go env GOROOT)" && $$(go env GOPATH)/bin/golangci-lint run --timeout 5m
 
 .PHONY: generate-mocks
-generate-mocks:	
+generate-mocks: ## Generate mock files for testing
 	mockery ${COMMON_MOCKERY_PARAMS}
+
+.PHONY: test
+test: check-go ## Run all unit tests
+	@echo "Running all tests..."
+	@go test ./... -v -race
+
+.PHONY: test-coverage
+test-coverage: check-go ## Run all unit tests with coverage report
+	@echo "Running tests with coverage..."
+	@go test ./... -coverprofile=coverage.out -coverpkg=./... -v
+	@echo ""
+	@echo "📊 Coverage Summary:"
+	@echo "===================="
+	@go tool cover -func=coverage.out | grep -v "mocks" | awk ' \
+		BEGIN { \
+			print sprintf("%-80s %10s", "File", "Coverage"); \
+			print "--------------------------------------------------------------------------------------------"; \
+		} \
+		/.go:/ { \
+			split($$1, parts, ":"); \
+			file = parts[1]; \
+			coverage = $$NF; \
+			gsub(/%/, "", coverage); \
+			if (!(file in files)) { \
+				files[file] = 1; \
+				cmd = "go tool cover -func=coverage.out | grep \"" file ":\" | grep -v mocks | awk \"{sum+=\\$$NF; gsub(/%/, \\\"\\\", \\$$NF); total+=\\$$NF; count++} END {if(count>0) print total/count; else print 0}\""; \
+				cmd | getline result; \
+				close(cmd); \
+				file_coverage[file] = result; \
+			} \
+		} \
+		END { \
+			sum = 0; \
+			count = 0; \
+			for (file in file_coverage) { \
+				cov = file_coverage[file]; \
+				sum += cov; \
+				count++; \
+				marker = ""; \
+				if (cov >= 90) marker = " ✅"; \
+				else if (cov >= 70) marker = " ✓"; \
+				else if (cov < 50) marker = " ⚠️"; \
+				printf("%-80s %9.1f%%%s\n", file, cov, marker); \
+			} \
+			print "============================================================================================"; \
+			if (count > 0) printf("%-80s %9.1f%%\n", "TOTAL", sum/count); \
+		}' | sort
+	@echo ""
+	@echo "💡 Tip: Run 'go tool cover -html=coverage.out' to view detailed coverage in browser"
+
+.PHONY: test-quick
+test-quick: check-go ## Run all unit tests without race detector (faster)
+	@echo "Running tests (quick mode)..."
+	@go test ./... -short
