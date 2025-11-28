@@ -14,11 +14,11 @@ packages:
   #   config:
   #     all: true
   #     dir: "internal/indexer/mocks"
-  # github.com/goran-ethernal/ChainIndexor/pkg/reorg:
-  #   config:
-  #     all: true
-  #     dir: "internal/reorg/mocks"
-  # github.com/goran-ethernal/ChainIndexor/pkg/fetcher/store:
-  #   config:
-  #     all: true
-  #     dir: "internal/fetcher/store/mocks"
+  github.com/goran-ethernal/ChainIndexor/pkg/reorg:
+    config:
+      all: true
+      dir: "internal/reorg/mocks"
+  github.com/goran-ethernal/ChainIndexor/pkg/fetcher/store:
+    config:
+      all: true
+      dir: "internal/fetcher/store/mocks"

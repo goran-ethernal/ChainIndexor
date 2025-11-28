@@ -12,11 +12,13 @@ import (
 	"github.com/goran-ethernal/ChainIndexor/internal/fetcher/store"
 	"github.com/goran-ethernal/ChainIndexor/internal/indexer"
 	"github.com/goran-ethernal/ChainIndexor/internal/logger"
-	"github.com/goran-ethernal/ChainIndexor/internal/reorg"
 	"github.com/goran-ethernal/ChainIndexor/internal/rpc"
 	"github.com/goran-ethernal/ChainIndexor/internal/types"
 	"github.com/goran-ethernal/ChainIndexor/pkg/config"
+	"github.com/goran-ethernal/ChainIndexor/pkg/downloader"
+	fch "github.com/goran-ethernal/ChainIndexor/pkg/fetcher"
 	idx "github.com/goran-ethernal/ChainIndexor/pkg/indexer"
+	"github.com/goran-ethernal/ChainIndexor/pkg/reorg"
 )
 
 // Downloader orchestrates the log downloading process.
@@ -25,11 +27,11 @@ import (
 type Downloader struct {
 	cfg           config.DownloaderConfig
 	rpc           *rpc.Client
-	reorgDetector *reorg.ReorgDetector
-	syncManager   *SyncManager
+	reorgDetector reorg.Detector
+	syncManager   downloader.SyncManager
 	log           *logger.Logger
 	coordinator   *indexer.IndexerCoordinator
-	logFetcher    *fetcher.LogFetcher
+	logFetcher    fch.LogFetcher
 
 	// Filter configuration built from registered indexers
 	mu        sync.RWMutex
@@ -44,8 +46,8 @@ type Downloader struct {
 func New(
 	cfg config.DownloaderConfig,
 	rpcClient *rpc.Client,
-	reorgDetector *reorg.ReorgDetector,
-	syncManager *SyncManager,
+	reorgDetector reorg.Detector,
+	syncManager downloader.SyncManager,
 	log *logger.Logger,
 ) (*Downloader, error) {
 	if rpcClient == nil {
@@ -214,7 +216,7 @@ func (d *Downloader) Download(ctx context.Context) error {
 		d.log.Infow("resuming download", "last_indexed_block", lastIndexedBlock)
 	}
 
-	d.logFetcher.SetMode(fetcher.ModeBackfill) // Always start in backfill mode
+	d.logFetcher.SetMode(fch.ModeBackfill) // Always start in backfill mode
 
 	// Main download loop
 	for {
@@ -316,11 +318,11 @@ func (d *Downloader) handleReorg(firstReorgBlock uint64) error {
 	}
 
 	// Switch back to backfill mode to re-process the affected range
-	if err := d.syncManager.SetMode(fetcher.ModeBackfill); err != nil {
+	if err := d.syncManager.SetMode(fch.ModeBackfill); err != nil {
 		return fmt.Errorf("failed to set mode after reorg: %w", err)
 	}
 
-	d.logFetcher.SetMode(fetcher.ModeBackfill)
+	d.logFetcher.SetMode(fch.ModeBackfill)
 
 	d.log.Infow("reorg handled, resuming from safe block", "block", rollbackTo)
 

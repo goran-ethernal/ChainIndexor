@@ -12,6 +12,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/goran-ethernal/ChainIndexor/internal/logger"
 	"github.com/goran-ethernal/ChainIndexor/internal/rpc/mocks"
+	"github.com/goran-ethernal/ChainIndexor/pkg/reorg"
 	"github.com/stretchr/testify/require"
 )
 
@@ -214,7 +215,7 @@ func TestReorgDetector_VerifyAndRecordBlocks_ReorgInNonFinalizedBlocks(t *testin
 	require.Error(t, err)
 
 	// Should be a reorg error
-	var reorgErr *ReorgDetectedError
+	var reorgErr *reorg.ReorgDetectedError
 	require.True(t, errors.As(err, &reorgErr))
 	require.Equal(t, uint64(101), reorgErr.FirstReorgBlock)
 }
@@ -244,7 +245,7 @@ func TestReorgDetector_VerifyAndRecordBlocks_ReorgBetweenRPCCalls(t *testing.T) 
 	require.Error(t, err)
 
 	// Should be a reorg error
-	var reorgErr *ReorgDetectedError
+	var reorgErr *reorg.ReorgDetectedError
 	require.True(t, errors.As(err, &reorgErr))
 	require.Equal(t, uint64(100), reorgErr.FirstReorgBlock)
 }
@@ -273,7 +274,7 @@ func TestReorgDetector_VerifyAndRecordBlocks_ChainDiscontinuity(t *testing.T) {
 	require.Error(t, err)
 
 	// Should be a reorg error
-	var reorgErr *ReorgDetectedError
+	var reorgErr *reorg.ReorgDetectedError
 	require.True(t, errors.As(err, &reorgErr))
 	require.Equal(t, uint64(101), reorgErr.FirstReorgBlock)
 }
