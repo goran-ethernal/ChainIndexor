@@ -3,13 +3,27 @@ package db
 import (
 	"database/sql"
 	"fmt"
+	"os"
+	"path/filepath"
 
 	"github.com/goran-ethernal/ChainIndexor/pkg/config"
 	_ "github.com/mattn/go-sqlite3"
 )
 
+const dbFolderPerm = 0755
+
+// ensureDBFolder ensures the directory that contains dbPath exists.
+// Example dbPath: "./data/mytokenindexer.sqlite"
+func ensureDBFolder(dbPath string) error {
+	dir := filepath.Dir(dbPath)
+	return os.MkdirAll(dir, dbFolderPerm)
+}
+
 // NewSQLiteDB creates a new SQLite DB
 func NewSQLiteDB(dbPath string) (*sql.DB, error) {
+	if err := ensureDBFolder(dbPath); err != nil {
+		return nil, fmt.Errorf("failed to ensure DB folder: %w", err)
+	}
 	return sql.Open("sqlite3", fmt.Sprintf(
 		"file:%s?_txlock=immediate&_foreign_keys=on&_journal_mode=WAL&_busy_timeout=30000",
 		dbPath,
