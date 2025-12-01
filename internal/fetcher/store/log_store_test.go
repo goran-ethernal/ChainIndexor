@@ -8,8 +8,8 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/goran-ethernal/ChainIndexor/internal/db"
-	"github.com/goran-ethernal/ChainIndexor/internal/downloader/migrations"
 	"github.com/goran-ethernal/ChainIndexor/internal/logger"
+	"github.com/goran-ethernal/ChainIndexor/internal/migrations"
 	"github.com/goran-ethernal/ChainIndexor/pkg/fetcher/store"
 	"github.com/stretchr/testify/require"
 )
@@ -70,7 +70,7 @@ func TestLogStore_StoreLogs(t *testing.T) {
 	}
 
 	topics := []common.Hash{common.HexToHash("0x1234")} // Extract topic0 from test logs
-	err := store.StoreLogs(ctx, address, topics, 100, 102, logs)
+	err := store.StoreLogs(ctx, []common.Address{address}, [][]common.Hash{topics}, logs, 100, 102)
 	require.NoError(t, err)
 
 	// Retrieve logs
@@ -102,7 +102,7 @@ func TestLogStore_GetLogs_PartialCoverage(t *testing.T) {
 		createTestLog(address, 102, common.HexToHash("0xccc"), 0),
 	}
 	topics := []common.Hash{common.HexToHash("0x1234")}
-	err := store.StoreLogs(ctx, address, topics, 100, 102, logs1)
+	err := store.StoreLogs(ctx, []common.Address{address}, [][]common.Hash{topics}, logs1, 100, 102)
 	require.NoError(t, err)
 
 	// Store logs for blocks 105-107 (gap between 102 and 105)
@@ -111,7 +111,7 @@ func TestLogStore_GetLogs_PartialCoverage(t *testing.T) {
 		createTestLog(address, 106, common.HexToHash("0xeee"), 0),
 		createTestLog(address, 107, common.HexToHash("0xfff"), 0),
 	}
-	err = store.StoreLogs(ctx, address, topics, 105, 107, logs2)
+	err = store.StoreLogs(ctx, []common.Address{address}, [][]common.Hash{topics}, logs2, 105, 107)
 	require.NoError(t, err)
 
 	// Query range 100-107
@@ -144,7 +144,7 @@ func TestLogStore_HandleReorg(t *testing.T) {
 		createTestLog(address, 105, common.HexToHash("0xfff"), 0),
 	}
 	topics := []common.Hash{common.HexToHash("0x1234")}
-	err := store.StoreLogs(ctx, address, topics, 100, 105, logs)
+	err := store.StoreLogs(ctx, []common.Address{address}, [][]common.Hash{topics}, logs, 100, 105)
 	require.NoError(t, err)
 
 	// Handle reorg from block 103
@@ -182,7 +182,7 @@ func TestLogStore_PruneLogsBeforeBlock(t *testing.T) {
 		createTestLog(address, 105, common.HexToHash("0xfff"), 0),
 	}
 	topics := []common.Hash{common.HexToHash("0x1234")}
-	err := store.StoreLogs(ctx, address, topics, 100, 105, logs)
+	err := store.StoreLogs(ctx, []common.Address{address}, [][]common.Hash{topics}, logs, 100, 105)
 	require.NoError(t, err)
 
 	// Prune logs before block 103
@@ -212,7 +212,7 @@ func TestLogStore_MultipleAddresses(t *testing.T) {
 		createTestLog(address1, 101, common.HexToHash("0xbbb"), 0),
 	}
 	topics := []common.Hash{common.HexToHash("0x1234")}
-	err := store.StoreLogs(ctx, address1, topics, 100, 101, logs1)
+	err := store.StoreLogs(ctx, []common.Address{address1}, [][]common.Hash{topics}, logs1, 100, 101)
 	require.NoError(t, err)
 
 	// Store logs for address2
@@ -220,7 +220,7 @@ func TestLogStore_MultipleAddresses(t *testing.T) {
 		createTestLog(address2, 100, common.HexToHash("0xccc"), 0),
 		createTestLog(address2, 101, common.HexToHash("0xddd"), 0),
 	}
-	err = store.StoreLogs(ctx, address2, topics, 100, 101, logs2)
+	err = store.StoreLogs(ctx, []common.Address{address2}, [][]common.Hash{topics}, logs2, 100, 101)
 	require.NoError(t, err)
 
 	// Retrieve logs for address1
@@ -251,14 +251,14 @@ func TestLogStore_GetUnsyncedTopics(t *testing.T) {
 	logs1 := []types.Log{
 		createTestLog(address1, 50, common.HexToHash("0xaaa"), 0),
 	}
-	err := store.StoreLogs(ctx, address1, []common.Hash{topic1}, 0, 100, logs1)
+	err := store.StoreLogs(ctx, []common.Address{address1}, [][]common.Hash{{topic1}}, logs1, 0, 100)
 	require.NoError(t, err)
 
 	// Store logs for address1, topic2, blocks 0-50 (partial coverage)
 	logs2 := []types.Log{
 		createTestLog(address1, 25, common.HexToHash("0xbbb"), 0),
 	}
-	err = store.StoreLogs(ctx, address1, []common.Hash{topic2}, 0, 50, logs2)
+	err = store.StoreLogs(ctx, []common.Address{address1}, [][]common.Hash{{topic2}}, logs2, 0, 50)
 	require.NoError(t, err)
 
 	// Check unsynced topics for address1 up to block 100
@@ -293,10 +293,10 @@ func TestLogStore_GetUnsyncedTopics_CompleteCoverage(t *testing.T) {
 	topic := common.HexToHash("0x1234")
 
 	// Store coverage in multiple ranges that together cover 0-100
-	err := store.StoreLogs(ctx, address, []common.Hash{topic}, 0, 50, []types.Log{})
+	err := store.StoreLogs(ctx, []common.Address{address}, [][]common.Hash{{topic}}, []types.Log{}, 0, 50)
 	require.NoError(t, err)
 
-	err = store.StoreLogs(ctx, address, []common.Hash{topic}, 51, 100, []types.Log{})
+	err = store.StoreLogs(ctx, []common.Address{address}, [][]common.Hash{{topic}}, []types.Log{}, 51, 100)
 	require.NoError(t, err)
 
 	// Check unsynced topics - should be empty as we have complete coverage
@@ -322,7 +322,7 @@ func TestLogStore_HandleReorg_ClearsTopicCoverage(t *testing.T) {
 	logs := []types.Log{
 		createTestLog(address, 50, common.HexToHash("0xaaa"), 0),
 	}
-	err := store.StoreLogs(ctx, address, []common.Hash{topic}, 0, 100, logs)
+	err := store.StoreLogs(ctx, []common.Address{address}, [][]common.Hash{{topic}}, logs, 0, 100)
 	require.NoError(t, err)
 
 	// Verify topic is synced
@@ -355,13 +355,13 @@ func TestLogStore_HandleReorg_TruncatesSpanningRanges(t *testing.T) {
 	logs1 := []types.Log{
 		createTestLog(address, 50, common.HexToHash("0xaaa"), 0),
 	}
-	err := store.StoreLogs(ctx, address, []common.Hash{topic}, 0, 100, logs1)
+	err := store.StoreLogs(ctx, []common.Address{address}, [][]common.Hash{{topic}}, logs1, 0, 100)
 	require.NoError(t, err)
 
 	logs2 := []types.Log{
 		createTestLog(address, 150, common.HexToHash("0xbbb"), 0),
 	}
-	err = store.StoreLogs(ctx, address, []common.Hash{topic}, 101, 200, logs2)
+	err = store.StoreLogs(ctx, []common.Address{address}, [][]common.Hash{{topic}}, logs2, 101, 200)
 	require.NoError(t, err)
 
 	// Verify we have two coverage ranges
@@ -400,7 +400,7 @@ func TestLogStore_HandleReorg_TruncatesSpanningRanges(t *testing.T) {
 	logs3 := []types.Log{
 		createTestLog(address, 175, common.HexToHash("0xccc"), 0),
 	}
-	err = store.StoreLogs(ctx, address, []common.Hash{topic}, 150, 200, logs3)
+	err = store.StoreLogs(ctx, []common.Address{address}, [][]common.Hash{{topic}}, logs3, 150, 200)
 	require.NoError(t, err)
 
 	// Now we should have three coverage ranges: 0-100, 101-149, 150-200
@@ -614,7 +614,7 @@ func TestLogStore_TopicConversion(t *testing.T) {
 				topicFilter = []common.Hash{tt.topics[0]}
 			}
 
-			err := store.StoreLogs(ctx, address, topicFilter, log.BlockNumber, log.BlockNumber, []types.Log{log})
+			err := store.StoreLogs(ctx, []common.Address{address}, [][]common.Hash{topicFilter}, []types.Log{log}, log.BlockNumber, log.BlockNumber)
 			require.NoError(t, err)
 
 			// Retrieve and verify topics are preserved correctly
@@ -635,7 +635,7 @@ func TestLogStore_StoreLogs_EmptyLogs(t *testing.T) {
 	topic := common.HexToHash("0x1234")
 
 	// Store empty logs (important for coverage tracking)
-	err := store.StoreLogs(ctx, address, []common.Hash{topic}, 100, 105, []types.Log{})
+	err := store.StoreLogs(ctx, []common.Address{address}, [][]common.Hash{{topic}}, []types.Log{}, 100, 105)
 	require.NoError(t, err)
 
 	// Coverage should still be recorded
@@ -660,11 +660,11 @@ func TestLogStore_StoreLogs_DuplicateLogs(t *testing.T) {
 	}
 
 	// Store logs first time
-	err := store.StoreLogs(ctx, address, []common.Hash{topic}, 100, 101, logs)
+	err := store.StoreLogs(ctx, []common.Address{address}, [][]common.Hash{{topic}}, logs, 100, 101)
 	require.NoError(t, err)
 
 	// Store same logs again (should be ignored due to UNIQUE constraint)
-	err = store.StoreLogs(ctx, address, []common.Hash{topic}, 100, 101, logs)
+	err = store.StoreLogs(ctx, []common.Address{address}, [][]common.Hash{{topic}}, logs, 100, 101)
 	require.NoError(t, err)
 
 	// Should still only have 2 logs
@@ -687,7 +687,7 @@ func TestLogStore_MultipleTopics(t *testing.T) {
 		createTestLog(address, 100, common.HexToHash("0xaaa"), 0),
 	}
 
-	err := store.StoreLogs(ctx, address, []common.Hash{topic1, topic2}, 0, 100, logs)
+	err := store.StoreLogs(ctx, []common.Address{address}, [][]common.Hash{{topic1, topic2}}, logs, 0, 100)
 	require.NoError(t, err)
 
 	// Check that both topics are tracked in coverage

@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -11,6 +12,8 @@ import (
 	"github.com/goran-ethernal/ChainIndexor/pkg/fetcher/store"
 	"github.com/russross/meddler"
 )
+
+var _ store.LogStore = (*LogStore)(nil)
 
 // LogStore implements LogStore interface using SQLite as the backend.
 type LogStore struct {
@@ -152,17 +155,26 @@ func (s *LogStore) hasCompleteCoverage(coverages []*dbTopicCoverage, fromBlock, 
 // StoreLogs saves logs to the store for the given address and block range.
 func (s *LogStore) StoreLogs(
 	ctx context.Context,
-	address common.Address,
-	topics []common.Hash,
-	fromBlock, toBlock uint64,
+	addresses []common.Address,
+	topics [][]common.Hash,
 	logs []types.Log,
+	fromBlock, toBlock uint64,
 ) error {
+	if len(addresses) != len(topics) {
+		return fmt.Errorf("addresses and topics length mismatch: %d vs %d", len(addresses), len(topics))
+	}
+
+	if len(addresses) == 0 {
+		s.log.Debugf("No addresses to store logs for, skipping store operation")
+		return nil
+	}
+
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("failed to begin transaction: %w", err)
 	}
 	defer func() {
-		if err := tx.Rollback(); err != nil {
+		if err := tx.Rollback(); err != nil && !errors.Is(err, sql.ErrTxDone) {
 			s.log.Errorf("failed to rollback transaction: %v", err)
 		}
 	}()
@@ -179,29 +191,32 @@ func (s *LogStore) StoreLogs(
 		}
 	}
 
-	// Record coverage
-	const coverageInsertQuery = `
-		INSERT INTO log_coverage (address, from_block, to_block)
-		VALUES (?, ?, ?)
-		ON CONFLICT(address, from_block, to_block) DO NOTHING
-	`
+	for i, address := range addresses {
+		topics := topics[i]
+		// Record coverage
+		const coverageInsertQuery = `
+			INSERT INTO log_coverage (address, from_block, to_block)
+			VALUES (?, ?, ?)
+			ON CONFLICT(address, from_block, to_block) DO NOTHING
+		`
 
-	_, err = tx.Exec(coverageInsertQuery, address.Hex(), fromBlock, toBlock)
-	if err != nil {
-		return fmt.Errorf("failed to insert coverage: %w", err)
-	}
-
-	// Record topic-specific coverage for each topic queried
-	const topicCoverageInsertQuery = `
-		INSERT INTO topic_coverage (address, topic0, from_block, to_block)
-		VALUES (?, ?, ?, ?)
-		ON CONFLICT(address, topic0, from_block, to_block) DO NOTHING
-	`
-
-	for _, topic := range topics {
-		_, err = tx.Exec(topicCoverageInsertQuery, address.Hex(), topic.Hex(), fromBlock, toBlock)
+		_, err = tx.Exec(coverageInsertQuery, address.Hex(), fromBlock, toBlock)
 		if err != nil {
-			return fmt.Errorf("failed to insert topic coverage: %w", err)
+			return fmt.Errorf("failed to insert coverage: %w", err)
+		}
+
+		// Record topic-specific coverage for each topic queried
+		const topicCoverageInsertQuery = `
+			INSERT INTO topic_coverage (address, topic0, from_block, to_block)
+			VALUES (?, ?, ?, ?)
+			ON CONFLICT(address, topic0, from_block, to_block) DO NOTHING
+		`
+
+		for _, topic := range topics {
+			_, err = tx.Exec(topicCoverageInsertQuery, address.Hex(), topic.Hex(), fromBlock, toBlock)
+			if err != nil {
+				return fmt.Errorf("failed to insert topic coverage: %w", err)
+			}
 		}
 	}
 
@@ -209,8 +224,8 @@ func (s *LogStore) StoreLogs(
 		return fmt.Errorf("failed to commit transaction: %w", err)
 	}
 
-	s.log.Debugf("Stored %d logs for address %s, %d topics, blocks %d-%d",
-		len(logs), address.Hex(), len(topics), fromBlock, toBlock)
+	s.log.Debugf("Stored %d logs for %d addresses, blocks %d-%d",
+		len(logs), len(addresses), fromBlock, toBlock)
 
 	return nil
 }

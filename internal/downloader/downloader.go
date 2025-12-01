@@ -210,7 +210,10 @@ func (d *Downloader) Download(ctx context.Context) error {
 	lastIndexedBlock := state.LastIndexedBlock
 	downloaderStartBlock := d.getDownloaderStartBlock()
 	if lastIndexedBlock == 0 {
-		lastIndexedBlock = downloaderStartBlock - 1
+		if downloaderStartBlock > 0 {
+			lastIndexedBlock = downloaderStartBlock - 1
+		}
+
 		d.log.Infow("starting fresh download", "start_block", lastIndexedBlock)
 	} else {
 		d.log.Infow("resuming download", "last_indexed_block", lastIndexedBlock)
@@ -286,8 +289,9 @@ func (d *Downloader) Download(ctx context.Context) error {
 			lastIndexedBlock = result.ToBlock
 
 			d.log.Infow("checkpoint saved",
-				"block", lastIndexedBlock,
-				"block_hash", blockHash.Hex(),
+				"from_block", result.FromBlock,
+				"to_block", lastIndexedBlock,
+				"to_block_hash", blockHash.Hex(),
 				"mode", d.logFetcher.GetMode(),
 				"logs_processed", len(result.Logs),
 			)

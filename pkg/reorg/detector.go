@@ -16,7 +16,7 @@ type Detector interface {
 	// 4. Record the new blocks to DB
 	// All database operations are performed atomically within a single transaction.
 	// Returns ErrReorgDetected if a reorg is detected.
-	VerifyAndRecordBlocks(ctx context.Context, logs []types.Log, fromBlock, toBlock uint64) error
+	VerifyAndRecordBlocks(ctx context.Context, logs []types.Log, fromBlock, toBlock uint64) ([]*types.Header, error)
 
 	// Close closes the detector and releases any resources.
 	Close() error

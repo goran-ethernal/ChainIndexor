@@ -18,6 +18,17 @@ func (ut *UnsyncedTopics) IsEmpty() bool {
 	return len(ut.addrToTopicCoverage) == 0
 }
 
+func (ut *UnsyncedTopics) ShouldCatchUp(lastIndexedBlock uint64) bool {
+	for _, topicMap := range ut.addrToTopicCoverage {
+		for _, coverage := range topicMap {
+			if coverage.ToBlock < lastIndexedBlock {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 func (ut *UnsyncedTopics) ContainsAddress(address common.Address) bool {
 	_, exists := ut.addrToTopicCoverage[address]
 	return exists

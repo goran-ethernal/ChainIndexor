@@ -116,18 +116,10 @@ func (lf *LogFetcher) fetchRange(
 		}
 	}
 
-	// Fetch block headers first (needed for reorg detection even if no logs)
-	blockNumbers := make([]uint64, 0, toBlock-fromBlock+1)
-	for blockNum := fromBlock; blockNum <= toBlock; blockNum++ {
-		blockNumbers = append(blockNumbers, blockNum)
-	}
-
-	headers, err := lf.rpc.BatchGetBlockHeaders(ctx, blockNumbers)
-	if err != nil {
-		return nil, fmt.Errorf("failed to fetch headers: %w", err)
-	}
-
-	var logs []types.Log
+	var (
+		logs []types.Log
+		err  error
+	)
 
 	// Only fetch logs if we have active addresses
 	if len(activeAddresses) > 0 {
@@ -162,9 +154,17 @@ func (lf *LogFetcher) fetchRange(
 		)
 	}
 
+	// Store fetched logs
+	if err := lf.logStore.StoreLogs(ctx,
+		activeAddresses, activeTopics, logs,
+		fromBlock, toBlock); err != nil {
+		return nil, fmt.Errorf("failed to store logs: %w", err)
+	}
+
 	// Verify consistency and record blocks
 	// The reorg detector will verify headers and detect any reorgs
-	if err := lf.reorgDetector.VerifyAndRecordBlocks(ctx, logs, fromBlock, toBlock); err != nil {
+	headers, err := lf.reorgDetector.VerifyAndRecordBlocks(ctx, logs, fromBlock, toBlock)
+	if err != nil {
 		// If reorg detected, invalidate cache
 		var reorgErr *reorg.ReorgDetectedError
 		if errors.As(err, &reorgErr) {
@@ -184,7 +184,6 @@ func (lf *LogFetcher) fetchRange(
 		"from_block", fromBlock,
 		"to_block", toBlock,
 		"logs_count", len(logs),
-		"blocks_count", len(headers),
 	)
 
 	return &fetcher.FetchResult{
@@ -225,7 +224,7 @@ func (lf *LogFetcher) fetchBackfill(
 		return nil, fmt.Errorf("failed to get unsynced topics: %w", err)
 	}
 
-	if !nonSyncedLogs.IsEmpty() {
+	if !nonSyncedLogs.IsEmpty() && nonSyncedLogs.ShouldCatchUp(lastIndexedBlock) {
 		lf.log.Info("found unsynced logs, syncing them first")
 
 		unsyncedAddresses, unsyncedTopics, lastCoveredBlock := nonSyncedLogs.GetAddressesAndTopics()
@@ -251,7 +250,7 @@ func (lf *LogFetcher) fetchBackfill(
 	toBlock := min(fromBlock+lf.cfg.ChunkSize-1, finalizedBlock)
 
 	// Check if we've caught up
-	if fromBlock > finalizedBlock {
+	if fromBlock >= finalizedBlock || toBlock >= finalizedBlock {
 		lf.log.Info("backfill complete, switching to live mode")
 		lf.mode = fetcher.ModeLive
 		return lf.fetchLive(ctx, lastIndexedBlock)

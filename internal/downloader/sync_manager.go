@@ -6,8 +6,6 @@ import (
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/goran-ethernal/ChainIndexor/internal/db"
-	"github.com/goran-ethernal/ChainIndexor/internal/downloader/migrations"
 	"github.com/goran-ethernal/ChainIndexor/internal/logger"
 	pkgdownloader "github.com/goran-ethernal/ChainIndexor/pkg/downloader"
 	"github.com/goran-ethernal/ChainIndexor/pkg/fetcher"
@@ -29,19 +27,9 @@ type SyncManager struct {
 type SyncState = pkgdownloader.SyncState
 
 // NewSyncManager creates a new SyncManager instance.
-func NewSyncManager(dbPath string, log *logger.Logger) (*SyncManager, error) {
-	if err := migrations.RunMigrations(dbPath); err != nil {
-		return nil, fmt.Errorf("failed to run migrations: %w", err)
-	}
-
-	// Open database connection first
-	database, err := db.NewSQLiteDB(dbPath)
-	if err != nil {
-		return nil, fmt.Errorf("failed to open database: %w", err)
-	}
-
+func NewSyncManager(db *sql.DB, log *logger.Logger) (*SyncManager, error) {
 	sm := &SyncManager{
-		db:  database,
+		db:  db,
 		log: log.WithComponent("sync-manager"),
 	}
 

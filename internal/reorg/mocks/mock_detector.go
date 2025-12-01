@@ -69,21 +69,33 @@ func (_c *Detector_Close_Call) RunAndReturn(run func() error) *Detector_Close_Ca
 }
 
 // VerifyAndRecordBlocks provides a mock function with given fields: ctx, logs, fromBlock, toBlock
-func (_m *Detector) VerifyAndRecordBlocks(ctx context.Context, logs []types.Log, fromBlock uint64, toBlock uint64) error {
+func (_m *Detector) VerifyAndRecordBlocks(ctx context.Context, logs []types.Log, fromBlock uint64, toBlock uint64) ([]*types.Header, error) {
 	ret := _m.Called(ctx, logs, fromBlock, toBlock)
 
 	if len(ret) == 0 {
 		panic("no return value specified for VerifyAndRecordBlocks")
 	}
 
-	var r0 error
-	if rf, ok := ret.Get(0).(func(context.Context, []types.Log, uint64, uint64) error); ok {
+	var r0 []*types.Header
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context, []types.Log, uint64, uint64) ([]*types.Header, error)); ok {
+		return rf(ctx, logs, fromBlock, toBlock)
+	}
+	if rf, ok := ret.Get(0).(func(context.Context, []types.Log, uint64, uint64) []*types.Header); ok {
 		r0 = rf(ctx, logs, fromBlock, toBlock)
 	} else {
-		r0 = ret.Error(0)
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]*types.Header)
+		}
 	}
 
-	return r0
+	if rf, ok := ret.Get(1).(func(context.Context, []types.Log, uint64, uint64) error); ok {
+		r1 = rf(ctx, logs, fromBlock, toBlock)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
 }
 
 // Detector_VerifyAndRecordBlocks_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'VerifyAndRecordBlocks'
@@ -107,12 +119,12 @@ func (_c *Detector_VerifyAndRecordBlocks_Call) Run(run func(ctx context.Context,
 	return _c
 }
 
-func (_c *Detector_VerifyAndRecordBlocks_Call) Return(_a0 error) *Detector_VerifyAndRecordBlocks_Call {
-	_c.Call.Return(_a0)
+func (_c *Detector_VerifyAndRecordBlocks_Call) Return(_a0 []*types.Header, _a1 error) *Detector_VerifyAndRecordBlocks_Call {
+	_c.Call.Return(_a0, _a1)
 	return _c
 }
 
-func (_c *Detector_VerifyAndRecordBlocks_Call) RunAndReturn(run func(context.Context, []types.Log, uint64, uint64) error) *Detector_VerifyAndRecordBlocks_Call {
+func (_c *Detector_VerifyAndRecordBlocks_Call) RunAndReturn(run func(context.Context, []types.Log, uint64, uint64) ([]*types.Header, error)) *Detector_VerifyAndRecordBlocks_Call {
 	_c.Call.Return(run)
 	return _c
 }

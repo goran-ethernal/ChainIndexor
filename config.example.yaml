@@ -1,31 +1,28 @@
+common_db: &common_db
+  journal_mode: WAL
+  synchronous: NORMAL
+  busy_timeout: 5000
+  cache_size: 10000
+  max_open_connections: 25
+  max_idle_connections: 5
+  enable_foreign_keys: true
+
 downloader:
-  rpc_url: "https://mainnet.infura.io/v3/XXXX"
-  chunk_size: 5000               # block range per eth_getLogs call
-  finality: "finalized"          # "finalized", "safe", or "latest"
+  rpc_url: "http://localhost:10002"
+  chunk_size: 1000            # block range per eth_getLogs call
+  finality: "latest"          # "finalized", "safe", or "latest"
   db:
+    <<: *common_db
     path: "./data/downloader.sqlite"
-    journal_mode: "WAL"
-    synchronous: "NORMAL"
-    busy_timeout: 5000
-    cache_size: 10000
-    max_open_connections: 25
-    max_idle_connections: 5
-    enable_foreign_keys: true
 
 indexers:
   - name: "MyTokenIndexer"
-    start_block: 17000000        # block to start indexing from
+    start_block: 0        # block to start indexing from
     db:
+      <<: *common_db
       path: "./data/mytokenindexer.sqlite"
-      journal_mode: "WAL"
-      synchronous: "NORMAL"
-      busy_timeout: 5000
-      cache_size: 10000
-      max_open_connections: 25
-      max_idle_connections: 5
-      enable_foreign_keys: true
     contracts:
-      - address: "0x1234567890abcdef1234567890abcdef12345678"
+      - address: "0xc2C43FdAC1883b75aCfCdF7DF076d502f9Fa899c"
         events:
           - "Transfer(address,address,uint256)"
           - "Approval(address,address,uint256)"
