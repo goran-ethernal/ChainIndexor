@@ -21,7 +21,7 @@ import (
 // Compile-time check to ensure LogFetcher implements fetcher.LogFetcher interface.
 var _ fetcher.LogFetcher = (*LogFetcher)(nil)
 
-const ethereumBlockTime = 12 * time.Second
+const ethereumBlockTime = 2 * time.Second
 
 // LogFetcherConfig contains configuration for the LogFetcher.
 type LogFetcherConfig struct {
@@ -250,7 +250,7 @@ func (lf *LogFetcher) fetchBackfill(
 	toBlock := min(fromBlock+lf.cfg.ChunkSize-1, finalizedBlock)
 
 	// Check if we've caught up
-	if fromBlock >= finalizedBlock || toBlock >= finalizedBlock {
+	if fromBlock >= finalizedBlock {
 		lf.log.Info("backfill complete, switching to live mode")
 		lf.mode = fetcher.ModeLive
 		return lf.fetchLive(ctx, lastIndexedBlock)
