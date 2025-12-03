@@ -224,7 +224,7 @@ func (lf *LogFetcher) fetchBackfill(
 		return nil, fmt.Errorf("failed to get unsynced topics: %w", err)
 	}
 
-	if !nonSyncedLogs.IsEmpty() && nonSyncedLogs.ShouldCatchUp(lastIndexedBlock) {
+	if !nonSyncedLogs.IsEmpty() && nonSyncedLogs.ShouldCatchUp(lastIndexedBlock, downloaderStartBlock) {
 		lf.log.Info("found unsynced logs, syncing them first")
 
 		unsyncedAddresses, unsyncedTopics, lastCoveredBlock := nonSyncedLogs.GetAddressesAndTopics()

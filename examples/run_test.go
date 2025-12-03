@@ -23,7 +23,7 @@ func TestRun(t *testing.T) {
 		t.Fatalf("failed to load config: %v", err)
 	}
 
-	ethClient, err := rpc.NewClient(t.Context(), "http://localhost:10002") // Example RPC URL
+	ethClient, err := rpc.NewClient(t.Context(), cfg.Downloader.RPCURL) // Example RPC URL
 	if err != nil {
 		t.Fatalf("failed to create RPC client: %v", err)
 	}
@@ -79,7 +79,7 @@ func TestRun(t *testing.T) {
 		if err != nil {
 			t.Fatalf("downloader failed: %v", err)
 		}
-	case <-time.After(20 * time.Second):
+	case <-time.After(20 * time.Minute):
 		cancel()
 	}
 }

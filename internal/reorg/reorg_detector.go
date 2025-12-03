@@ -133,7 +133,14 @@ func (r *ReorgDetector) VerifyAndRecordBlocks(
 	// Step 3: Fetch headers for the new block range
 	blockNums := make([]uint64, 0, toBlock-fromBlock+1)
 	for blockNum := fromBlock; blockNum <= toBlock; blockNum++ {
-		blockNums = append(blockNums, blockNum)
+		if blockNum > finalizedBlockNum {
+			blockNums = append(blockNums, blockNum)
+		}
+	}
+
+	if len(blockNums) == 0 {
+		// All blocks are finalized and already verified
+		return nil, nil
 	}
 
 	headers, err := r.rpc.BatchGetBlockHeaders(ctx, blockNums)
@@ -141,10 +148,12 @@ func (r *ReorgDetector) VerifyAndRecordBlocks(
 		return nil, fmt.Errorf("failed to fetch headers for range: %w", err)
 	}
 
-	// Step 3a: Build map of block hashes from logs
+	// Step 3a: Build map of block hashes from logs that are in non finalized blocks
 	logBlockHashes := make(map[uint64]common.Hash)
 	for _, log := range logs {
-		logBlockHashes[log.BlockNumber] = log.BlockHash
+		if log.BlockNumber > finalizedBlockNum {
+			logBlockHashes[log.BlockNumber] = log.BlockHash
+		}
 	}
 
 	// Step 3b: Verify consistency between logs and headers

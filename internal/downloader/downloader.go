@@ -275,12 +275,14 @@ func (d *Downloader) Download(ctx context.Context) error {
 		// We can receive blocks from already indexed ranges
 		// due to new indexers being added with earlier start blocks
 		if state.LastIndexedBlock <= result.FromBlock {
-			lastHeader := result.Headers[len(result.Headers)-1]
-			blockHash := lastHeader.Hash()
+			blockHash := common.Hash{}
+			if len(result.Headers) > 0 {
+				blockHash = result.Headers[len(result.Headers)-1].Hash()
+			}
 
 			if err := d.syncManager.SaveCheckpoint(
 				result.ToBlock,
-				blockHash,
+				blockHash, // if it is zero, means its a finalized block
 				d.logFetcher.GetMode(),
 			); err != nil {
 				return fmt.Errorf("failed to save checkpoint: %w", err)

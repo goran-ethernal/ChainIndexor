@@ -18,7 +18,11 @@ func (ut *UnsyncedTopics) IsEmpty() bool {
 	return len(ut.addrToTopicCoverage) == 0
 }
 
-func (ut *UnsyncedTopics) ShouldCatchUp(lastIndexedBlock uint64) bool {
+func (ut *UnsyncedTopics) ShouldCatchUp(lastIndexedBlock, downloaderStartBlock uint64) bool {
+	if lastIndexedBlock <= downloaderStartBlock {
+		return false
+	}
+
 	for _, topicMap := range ut.addrToTopicCoverage {
 		for _, coverage := range topicMap {
 			if coverage.ToBlock < lastIndexedBlock {

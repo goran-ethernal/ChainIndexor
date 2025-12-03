@@ -8,8 +8,8 @@ common_db: &common_db
   enable_foreign_keys: true
 
 downloader:
-  rpc_url: "http://localhost:10002"
-  chunk_size: 1000            # block range per eth_getLogs call
+  rpc_url: "https://sepolia.gateway.tenderly.co/2gFSUOtAsGNiSwunU65ZoR"
+  chunk_size: 5000            # block range per eth_getLogs call
   finality: "latest"          # "finalized", "safe", or "latest"
   db:
     <<: *common_db
@@ -17,12 +17,11 @@ downloader:
 
 indexers:
   - name: "MyTokenIndexer"
-    start_block: 0        # block to start indexing from
+    start_block: 3236805      # block to start indexing from
     db:
       <<: *common_db
       path: "./data/mytokenindexer.sqlite"
     contracts:
-      - address: "0xc2C43FdAC1883b75aCfCdF7DF076d502f9Fa899c"
+      - address: "0x7b79995e5f793A07Bc00c21412e50Ecae098E7f9"
         events:
           - "Transfer(address,address,uint256)"
-          - "Approval(address,address,uint256)"
