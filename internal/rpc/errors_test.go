@@ -72,6 +72,8 @@ func TestIsTooManyResultsError(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
 			gotMatch, gotData := IsTooManyResultsError(tt.err)
 
 			require.Equal(t, tt.wantData, gotData)
