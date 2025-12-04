@@ -10,6 +10,7 @@ ChainIndexor is a high-performance, modular blockchain log indexer and event pro
 ## 🚀 Purpose & Overview
 
 ChainIndexor is designed to:
+
 - Efficiently fetch, filter, and store blockchain logs and events.
 - Support custom indexers for any contract/event type.
 - Handle large-scale data, reorgs, and RPC limitations robustly.
@@ -28,6 +29,7 @@ ChainIndexor is designed to:
 ## ⚡ Performance
 
 ChainIndexor is optimized for:
+
 - Fast initial syncs and incremental updates.
 - Minimal RPC calls via batching and chunking.
 - Safe operation under RPC rate limits and large data volumes.
@@ -46,6 +48,7 @@ Run the test in `examples/run_test.go` to test the ChainIndexor.
 ## 📦 Installation
 
 Clone the repo and build:
+
 ```bash
 git clone https://github.com/goran-ethernal/ChainIndexor.git
 cd ChainIndexor
@@ -67,6 +70,7 @@ go build ./...
 ## 🧪 Testing
 
 Run all tests and coverage:
+
 ```bash
 make test
 make test-coverage
