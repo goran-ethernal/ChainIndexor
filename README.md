@@ -78,7 +78,7 @@ Contributions are welcome! Please open issues and pull requests for bug fixes, f
 
 ## 📄 License
 
-ChainIndexor is MIT licensed. See [LICENSE](LICENSE) for details.
+ChainIndexor is Apache-2.0 licensed. See [LICENSE](LICENSE) for details.
 
 ## 🙏 Acknowledgements
 
