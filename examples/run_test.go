@@ -16,6 +16,8 @@ import (
 )
 
 func TestRun(t *testing.T) {
+	t.Skip("Exploratory example test - uncomment this and change the example config to run")
+
 	configPath := "../config.example.yaml"
 
 	cfg, err := config.LoadFromFile(configPath)

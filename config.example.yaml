@@ -8,20 +8,20 @@ common_db: &common_db
   enable_foreign_keys: true
 
 downloader:
-  rpc_url: "https://sepolia.gateway.tenderly.co/2gFSUOtAsGNiSwunU65ZoR"
+  rpc_url: "https://mainnet.infura.io/v3/XXXX"
   chunk_size: 5000            # block range per eth_getLogs call
-  finality: "latest"          # "finalized", "safe", or "latest"
+  finality: "finalized"       # "finalized", "safe", or "latest"
   db:
     <<: *common_db
     path: "./data/downloader.sqlite"
 
 indexers:
   - name: "MyTokenIndexer"
-    start_block: 3236805      # block to start indexing from
+    start_block: 17000000     # block to start indexing from
     db:
       <<: *common_db
       path: "./data/mytokenindexer.sqlite"
     contracts:
-      - address: "0x7b79995e5f793A07Bc00c21412e50Ecae098E7f9"
+      - address: "0x1234567890abcdef1234567890abcdef12345678"
         events:
           - "Transfer(address,address,uint256)"
