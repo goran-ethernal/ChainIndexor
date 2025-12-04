@@ -93,7 +93,6 @@ func RunMigrationsDBExtended(logger *logger.Logger,
 		len(migs.Migrations),
 		listMigrations.String())
 	nMigrations, err := migrate.ExecMax(db, "sqlite3", migs, dir, maxMigrations)
-
 	if err != nil {
 		return fmt.Errorf("error executing migration (max %d/%d) migrations: %s . Err: %w",
 			maxMigrations, len(migs.Migrations), listMigrations.String(), err)

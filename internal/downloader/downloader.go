@@ -210,7 +210,10 @@ func (d *Downloader) Download(ctx context.Context) error {
 	lastIndexedBlock := state.LastIndexedBlock
 	downloaderStartBlock := d.getDownloaderStartBlock()
 	if lastIndexedBlock == 0 {
-		lastIndexedBlock = downloaderStartBlock - 1
+		if downloaderStartBlock > 0 {
+			lastIndexedBlock = downloaderStartBlock - 1
+		}
+
 		d.log.Infow("starting fresh download", "start_block", lastIndexedBlock)
 	} else {
 		d.log.Infow("resuming download", "last_indexed_block", lastIndexedBlock)
@@ -272,12 +275,14 @@ func (d *Downloader) Download(ctx context.Context) error {
 		// We can receive blocks from already indexed ranges
 		// due to new indexers being added with earlier start blocks
 		if state.LastIndexedBlock <= result.FromBlock {
-			lastHeader := result.Headers[len(result.Headers)-1]
-			blockHash := lastHeader.Hash()
+			blockHash := common.Hash{}
+			if len(result.Headers) > 0 {
+				blockHash = result.Headers[len(result.Headers)-1].Hash()
+			}
 
 			if err := d.syncManager.SaveCheckpoint(
 				result.ToBlock,
-				blockHash,
+				blockHash, // if it is zero, means its a finalized block
 				d.logFetcher.GetMode(),
 			); err != nil {
 				return fmt.Errorf("failed to save checkpoint: %w", err)
@@ -286,8 +291,9 @@ func (d *Downloader) Download(ctx context.Context) error {
 			lastIndexedBlock = result.ToBlock
 
 			d.log.Infow("checkpoint saved",
-				"block", lastIndexedBlock,
-				"block_hash", blockHash.Hex(),
+				"from_block", result.FromBlock,
+				"to_block", lastIndexedBlock,
+				"to_block_hash", blockHash.Hex(),
 				"mode", d.logFetcher.GetMode(),
 				"logs_processed", len(result.Logs),
 			)

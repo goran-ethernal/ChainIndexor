@@ -26,10 +26,10 @@ type LogStore interface {
 	// topics parameter specifies which topics were queried (first element of each log's Topics array).
 	StoreLogs(
 		ctx context.Context,
-		address common.Address,
-		topics []common.Hash,
-		fromBlock, toBlock uint64,
+		addresses []common.Address,
+		topics [][]common.Hash,
 		logs []types.Log,
+		fromBlock, toBlock uint64,
 	) error
 
 	// HandleReorg deletes logs starting from the given block number.

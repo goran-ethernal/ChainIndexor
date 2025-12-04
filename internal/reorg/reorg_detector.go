@@ -8,9 +8,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
-	"github.com/goran-ethernal/ChainIndexor/internal/db"
 	"github.com/goran-ethernal/ChainIndexor/internal/logger"
-	"github.com/goran-ethernal/ChainIndexor/internal/reorg/migrations"
 	"github.com/goran-ethernal/ChainIndexor/pkg/reorg"
 	"github.com/goran-ethernal/ChainIndexor/pkg/rpc"
 	"github.com/russross/meddler"
@@ -26,20 +24,14 @@ type ReorgDetector struct {
 	rpc rpc.EthClient
 }
 
-// NewReorgDetector creates a new ReorgDetector with the given database connection.
-func NewReorgDetector(dbPath string, rpcClient rpc.EthClient, log *logger.Logger) (*ReorgDetector, error) {
-	// Run migrations to set up the database schema
-	err := migrations.RunMigrations(dbPath)
-	if err != nil {
-		return nil, fmt.Errorf("failed to run migrations: %w", err)
-	}
-	database, err := db.NewSQLiteDB(dbPath)
-	if err != nil {
-		return nil, fmt.Errorf("failed to open database: %w", err)
-	}
-
+// NewReorgDetector creates a new ReorgDetector with the given database configuration.
+func NewReorgDetector(
+	db *sql.DB,
+	rpcClient rpc.EthClient,
+	log *logger.Logger,
+) (*ReorgDetector, error) {
 	detector := &ReorgDetector{
-		db:  database,
+		db:  db,
 		rpc: rpcClient,
 		log: log.WithComponent("reorg-detector"),
 	}
@@ -56,7 +48,9 @@ func NewReorgDetector(dbPath string, rpcClient rpc.EthClient, log *logger.Logger
 // 3. Fetch headers for the new block range and verify consistency
 // 4. Record the new blocks to DB
 // All database operations are performed atomically within a single transaction.
-func (r *ReorgDetector) VerifyAndRecordBlocks(ctx context.Context, logs []types.Log, fromBlock, toBlock uint64) error {
+func (r *ReorgDetector) VerifyAndRecordBlocks(
+	ctx context.Context,
+	logs []types.Log, fromBlock, toBlock uint64) ([]*types.Header, error) {
 	r.log.Debugw("verifying and recording blocks",
 		"num_logs", len(logs),
 		"from_block", fromBlock,
@@ -66,7 +60,7 @@ func (r *ReorgDetector) VerifyAndRecordBlocks(ctx context.Context, logs []types.
 	// Begin transaction for atomic operations
 	tx, err := r.db.Begin()
 	if err != nil {
-		return fmt.Errorf("failed to begin transaction: %w", err)
+		return nil, fmt.Errorf("failed to begin transaction: %w", err)
 	}
 	defer func() {
 		if err := tx.Rollback(); err != nil && !errors.Is(err, sql.ErrTxDone) {
@@ -77,20 +71,20 @@ func (r *ReorgDetector) VerifyAndRecordBlocks(ctx context.Context, logs []types.
 	// Step 1: Get last finalized block and prune finalized blocks from DB
 	finalizedHeader, err := r.rpc.GetFinalizedBlockHeader(ctx)
 	if err != nil {
-		return fmt.Errorf("failed to get finalized block header: %w", err)
+		return nil, fmt.Errorf("failed to get finalized block header: %w", err)
 	}
 	finalizedBlockNum := finalizedHeader.Number.Uint64()
 
 	// Check if we have the finalized block in our DB
 	cachedFinalizedBlock, err := r.getStoredBlockTx(tx, finalizedBlockNum)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
-		return fmt.Errorf("failed to query finalized block hash: %w", err)
+		return nil, fmt.Errorf("failed to query finalized block hash: %w", err)
 	}
 
 	// if we have the finalized block and it matches, prune all blocks up to and including it
 	if cachedFinalizedBlock.BlockHash == finalizedHeader.Hash() {
 		if err := r.pruneOldBlocksTx(tx, finalizedBlockNum+1); err != nil {
-			return fmt.Errorf("failed to prune finalized blocks: %w", err)
+			return nil, fmt.Errorf("failed to prune finalized blocks: %w", err)
 		}
 		r.log.Debugw("pruned finalized blocks", "finalized_block", finalizedBlockNum)
 	}
@@ -98,7 +92,7 @@ func (r *ReorgDetector) VerifyAndRecordBlocks(ctx context.Context, logs []types.
 	// Step 2: Verify all non-finalized blocks in DB against current chain state
 	nonFinalizedBlocks, err := r.getStoredBlocksAfterBlockTx(tx, finalizedBlockNum)
 	if err != nil {
-		return fmt.Errorf("failed to get non-finalized blocks: %w", err)
+		return nil, fmt.Errorf("failed to get non-finalized blocks: %w", err)
 	}
 
 	if len(nonFinalizedBlocks) > 0 {
@@ -113,7 +107,7 @@ func (r *ReorgDetector) VerifyAndRecordBlocks(ctx context.Context, logs []types.
 		// Fetch current headers from RPC
 		currentHeaders, err := r.rpc.BatchGetBlockHeaders(ctx, blockNums)
 		if err != nil {
-			return fmt.Errorf("failed to fetch non-finalized headers: %w", err)
+			return nil, fmt.Errorf("failed to fetch non-finalized headers: %w", err)
 		}
 
 		// Verify hashes match
@@ -128,7 +122,7 @@ func (r *ReorgDetector) VerifyAndRecordBlocks(ctx context.Context, logs []types.
 					"cached_hash", cachedHash.Hex(),
 					"current_hash", currentHash.Hex(),
 				)
-				return reorg.NewReorgError(header.Number.Uint64(),
+				return nil, reorg.NewReorgError(header.Number.Uint64(),
 					fmt.Sprintf("cached_hash=%s current_hash=%s", cachedHash.Hex(), currentHash.Hex()))
 			}
 		}
@@ -139,18 +133,27 @@ func (r *ReorgDetector) VerifyAndRecordBlocks(ctx context.Context, logs []types.
 	// Step 3: Fetch headers for the new block range
 	blockNums := make([]uint64, 0, toBlock-fromBlock+1)
 	for blockNum := fromBlock; blockNum <= toBlock; blockNum++ {
-		blockNums = append(blockNums, blockNum)
+		if blockNum > finalizedBlockNum {
+			blockNums = append(blockNums, blockNum)
+		}
+	}
+
+	if len(blockNums) == 0 {
+		// All blocks are finalized and already verified
+		return nil, nil
 	}
 
 	headers, err := r.rpc.BatchGetBlockHeaders(ctx, blockNums)
 	if err != nil {
-		return fmt.Errorf("failed to fetch headers for range: %w", err)
+		return nil, fmt.Errorf("failed to fetch headers for range: %w", err)
 	}
 
-	// Step 3a: Build map of block hashes from logs
+	// Step 3a: Build map of block hashes from logs that are in non finalized blocks
 	logBlockHashes := make(map[uint64]common.Hash)
 	for _, log := range logs {
-		logBlockHashes[log.BlockNumber] = log.BlockHash
+		if log.BlockNumber > finalizedBlockNum {
+			logBlockHashes[log.BlockNumber] = log.BlockHash
+		}
 	}
 
 	// Step 3b: Verify consistency between logs and headers
@@ -166,7 +169,7 @@ func (r *ReorgDetector) VerifyAndRecordBlocks(ctx context.Context, logs []types.
 					"log_hash", logHash.Hex(),
 					"header_hash", headerHash.Hex(),
 				)
-				return reorg.NewReorgError(blockNum,
+				return nil, reorg.NewReorgError(blockNum,
 					fmt.Sprintf("log_hash=%s header_hash=%s", logHash.Hex(), headerHash.Hex()))
 			}
 		}
@@ -185,7 +188,7 @@ func (r *ReorgDetector) VerifyAndRecordBlocks(ctx context.Context, logs []types.
 					"expected_parent", expectedParent.Hex(),
 					"actual_parent", actualParent.Hex(),
 				)
-				return reorg.NewReorgError(headers[i].Number.Uint64(),
+				return nil, reorg.NewReorgError(headers[i].Number.Uint64(),
 					fmt.Sprintf("chain discontinuity between blocks %d and %d",
 						headers[i-1].Number.Uint64(), headers[i].Number.Uint64()))
 			}
@@ -194,12 +197,12 @@ func (r *ReorgDetector) VerifyAndRecordBlocks(ctx context.Context, logs []types.
 
 	// Step 4: All checks passed - safe to record blocks
 	if err := r.recordBlocksTx(tx, headers); err != nil {
-		return err
+		return nil, err
 	}
 
 	// Commit transaction
 	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("failed to commit transaction: %w", err)
+		return nil, fmt.Errorf("failed to commit transaction: %w", err)
 	}
 
 	if len(headers) > 0 {
@@ -210,7 +213,7 @@ func (r *ReorgDetector) VerifyAndRecordBlocks(ctx context.Context, logs []types.
 		)
 	}
 
-	return nil
+	return headers, nil
 }
 
 // StoredBlock represents a block stored in the database.

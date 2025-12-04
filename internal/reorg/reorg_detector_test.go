@@ -10,8 +10,11 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/goran-ethernal/ChainIndexor/internal/db"
 	"github.com/goran-ethernal/ChainIndexor/internal/logger"
+	"github.com/goran-ethernal/ChainIndexor/internal/migrations"
 	"github.com/goran-ethernal/ChainIndexor/internal/rpc/mocks"
+	"github.com/goran-ethernal/ChainIndexor/pkg/config"
 	"github.com/goran-ethernal/ChainIndexor/pkg/reorg"
 	"github.com/stretchr/testify/require"
 )
@@ -26,6 +29,16 @@ func setupTestReorgDetector(t *testing.T) (*ReorgDetector, *mocks.EthClient, fun
 
 	dbPath := tmpFile.Name()
 
+	// Create database config
+	dbConfig := config.DatabaseConfig{Path: dbPath}
+	dbConfig.ApplyDefaults()
+
+	err = migrations.RunMigrations(dbConfig.Path)
+	require.NoError(t, err)
+
+	database, err := db.NewSQLiteDBFromConfig(dbConfig)
+	require.NoError(t, err)
+
 	// Create mock RPC client
 	mockRPC := mocks.NewEthClient(t)
 
@@ -33,7 +46,7 @@ func setupTestReorgDetector(t *testing.T) (*ReorgDetector, *mocks.EthClient, fun
 	log, err := logger.NewLogger("error", true)
 	require.NoError(t, err)
 
-	detector, err := NewReorgDetector(dbPath, mockRPC, log)
+	detector, err := NewReorgDetector(database, mockRPC, log)
 	require.NoError(t, err)
 
 	cleanup := func() {
@@ -100,8 +113,9 @@ func TestReorgDetector_VerifyAndRecordBlocks_FirstTime(t *testing.T) {
 		},
 	}
 
-	err := detector.VerifyAndRecordBlocks(ctx, logs, 100, 102)
+	headers, err := detector.VerifyAndRecordBlocks(ctx, logs, 100, 102)
 	require.NoError(t, err)
+	require.Len(t, headers, 3)
 
 	// Verify blocks were recorded
 	tx, err := detector.db.Begin()
@@ -138,8 +152,9 @@ func TestReorgDetector_VerifyAndRecordBlocks_WithNonFinalizedBlocks(t *testing.T
 		{BlockNumber: 101, BlockHash: header101.Hash()},
 	}
 
-	err := detector.VerifyAndRecordBlocks(ctx, logs, 100, 101)
+	headers, err := detector.VerifyAndRecordBlocks(ctx, logs, 100, 101)
 	require.NoError(t, err)
+	require.Len(t, headers, 2)
 
 	// Now verify and record new blocks - should verify existing non-finalized blocks
 	header102 := createTestHeader(102, header101.Hash())
@@ -158,8 +173,9 @@ func TestReorgDetector_VerifyAndRecordBlocks_WithNonFinalizedBlocks(t *testing.T
 		{BlockNumber: 103, BlockHash: header103.Hash()},
 	}
 
-	err = detector.VerifyAndRecordBlocks(ctx, logs2, 102, 103)
+	headers, err = detector.VerifyAndRecordBlocks(ctx, logs2, 102, 103)
 	require.NoError(t, err)
+	require.Len(t, headers, 2)
 
 	// Verify all blocks were recorded
 	tx, err := detector.db.Begin()
@@ -195,8 +211,9 @@ func TestReorgDetector_VerifyAndRecordBlocks_ReorgInNonFinalizedBlocks(t *testin
 		{BlockNumber: 101, BlockHash: header101.Hash()},
 	}
 
-	err := detector.VerifyAndRecordBlocks(ctx, logs, 100, 101)
+	headers, err := detector.VerifyAndRecordBlocks(ctx, logs, 100, 101)
 	require.NoError(t, err)
+	require.Len(t, headers, 2)
 
 	// Now simulate a reorg - block 101 has a different hash on chain
 	header101Reorg := createTestHeader(101, header100.Hash())
@@ -211,8 +228,9 @@ func TestReorgDetector_VerifyAndRecordBlocks_ReorgInNonFinalizedBlocks(t *testin
 		{BlockNumber: 102, BlockHash: common.HexToHash("0x102")},
 	}
 
-	err = detector.VerifyAndRecordBlocks(ctx, logs2, 102, 102)
+	headers, err = detector.VerifyAndRecordBlocks(ctx, logs2, 102, 102)
 	require.Error(t, err)
+	require.Nil(t, headers)
 
 	// Should be a reorg error
 	var reorgErr *reorg.ReorgDetectedError
@@ -241,8 +259,9 @@ func TestReorgDetector_VerifyAndRecordBlocks_ReorgBetweenRPCCalls(t *testing.T) 
 		{BlockNumber: 101, BlockHash: header101.Hash()},
 	}
 
-	err := detector.VerifyAndRecordBlocks(ctx, logs, 100, 101)
+	headers, err := detector.VerifyAndRecordBlocks(ctx, logs, 100, 101)
 	require.Error(t, err)
+	require.Nil(t, headers)
 
 	// Should be a reorg error
 	var reorgErr *reorg.ReorgDetectedError
@@ -270,8 +289,9 @@ func TestReorgDetector_VerifyAndRecordBlocks_ChainDiscontinuity(t *testing.T) {
 		{BlockNumber: 101, BlockHash: header101.Hash()},
 	}
 
-	err := detector.VerifyAndRecordBlocks(ctx, logs, 100, 101)
+	headers, err := detector.VerifyAndRecordBlocks(ctx, logs, 100, 101)
 	require.Error(t, err)
+	require.Nil(t, headers)
 
 	// Should be a reorg error
 	var reorgErr *reorg.ReorgDetectedError
@@ -301,8 +321,9 @@ func TestReorgDetector_VerifyAndRecordBlocks_PrunesFinalizedBlocks(t *testing.T)
 		{BlockNumber: 52, BlockHash: header52.Hash()},
 	}
 
-	err := detector.VerifyAndRecordBlocks(ctx, logs, 50, 52)
+	headers, err := detector.VerifyAndRecordBlocks(ctx, logs, 50, 52)
 	require.NoError(t, err)
+	require.Len(t, headers, 3)
 
 	// Now finalized block is 51, should prune blocks <= 51
 	header53 := createTestHeader(53, header52.Hash())
@@ -319,8 +340,9 @@ func TestReorgDetector_VerifyAndRecordBlocks_PrunesFinalizedBlocks(t *testing.T)
 		{BlockNumber: 53, BlockHash: header53.Hash()},
 	}
 
-	err = detector.VerifyAndRecordBlocks(ctx, logs2, 53, 53)
+	headers, err = detector.VerifyAndRecordBlocks(ctx, logs2, 53, 53)
 	require.NoError(t, err)
+	require.Len(t, headers, 1)
 
 	// Verify blocks 50 and 51 were pruned
 	tx, err := detector.db.Begin()
@@ -356,8 +378,9 @@ func TestReorgDetector_VerifyAndRecordBlocks_EmptyLogs(t *testing.T) {
 	// Empty logs array (no logs in this range, but still need to verify blocks)
 	var logs []types.Log
 
-	err := detector.VerifyAndRecordBlocks(ctx, logs, 100, 101)
+	headers, err := detector.VerifyAndRecordBlocks(ctx, logs, 100, 101)
 	require.NoError(t, err)
+	require.Len(t, headers, 2)
 
 	// Verify blocks were recorded
 	tx, err := detector.db.Begin()
@@ -391,8 +414,9 @@ func TestReorgDetector_VerifyAndRecordBlocks_SingleBlock(t *testing.T) {
 		{BlockNumber: 100, BlockHash: header100.Hash()},
 	}
 
-	err := detector.VerifyAndRecordBlocks(ctx, logs, 100, 100)
+	headers, err := detector.VerifyAndRecordBlocks(ctx, logs, 100, 100)
 	require.NoError(t, err)
+	require.Len(t, headers, 1)
 
 	// Verify block was recorded
 	tx, err := detector.db.Begin()
@@ -410,25 +434,10 @@ func TestReorgDetector_VerifyAndRecordBlocks_SingleBlock(t *testing.T) {
 }
 
 func TestReorgDetector_Close(t *testing.T) {
-	// Create temporary database
-	tmpFile, err := os.CreateTemp("", "reorg_test_*.db")
-	require.NoError(t, err)
-	tmpFile.Close()
-	dbPath := tmpFile.Name()
-	defer os.Remove(dbPath)
-
-	// Create mock RPC client
-	mockRPC := mocks.NewEthClient(t)
-
-	// Create reorg detector
-	log, err := logger.NewLogger("error", true)
-	require.NoError(t, err)
-
-	detector, err := NewReorgDetector(dbPath, mockRPC, log)
-	require.NoError(t, err)
+	detector, _, _ := setupTestReorgDetector(t)
 
 	// Close should not return an error
-	err = detector.Close()
+	err := detector.Close()
 	require.NoError(t, err)
 }
 
@@ -454,8 +463,9 @@ func TestReorgDetector_StoredBlockOperations(t *testing.T) {
 		{BlockNumber: 102, BlockHash: header102.Hash()},
 	}
 
-	err := detector.VerifyAndRecordBlocks(ctx, logs, 100, 102)
+	headers, err := detector.VerifyAndRecordBlocks(ctx, logs, 100, 102)
 	require.NoError(t, err)
+	require.Len(t, headers, 3)
 
 	// Test getStoredBlockTx
 	tx, err := detector.db.Begin()

@@ -8,9 +8,10 @@ import (
 	"time"
 
 	"github.com/ethereum/go-ethereum"
-	"github.com/ethereum/go-ethereum/common"
+	ethcommon "github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/goran-ethernal/ChainIndexor/internal/logger"
+	irpc "github.com/goran-ethernal/ChainIndexor/internal/rpc"
 	itypes "github.com/goran-ethernal/ChainIndexor/internal/types"
 	"github.com/goran-ethernal/ChainIndexor/pkg/fetcher"
 	"github.com/goran-ethernal/ChainIndexor/pkg/fetcher/store"
@@ -21,7 +22,7 @@ import (
 // Compile-time check to ensure LogFetcher implements fetcher.LogFetcher interface.
 var _ fetcher.LogFetcher = (*LogFetcher)(nil)
 
-const ethereumBlockTime = 12 * time.Second
+const ethereumBlockTime = 2 * time.Second
 
 // LogFetcherConfig contains configuration for the LogFetcher.
 type LogFetcherConfig struct {
@@ -35,13 +36,13 @@ type LogFetcherConfig struct {
 	FinalizedLag uint64
 
 	// Addresses are the contract addresses to filter
-	Addresses []common.Address
+	Addresses []ethcommon.Address
 
 	// Topics are the event topic filters
-	Topics [][]common.Hash
+	Topics [][]ethcommon.Hash
 
 	// AddressStartBlocks maps each address to its minimum start block
-	AddressStartBlocks map[common.Address]uint64
+	AddressStartBlocks map[ethcommon.Address]uint64
 }
 
 // LogFetcher handles fetching logs and block headers from the blockchain.
@@ -92,8 +93,8 @@ func (lf *LogFetcher) FetchRange(ctx context.Context, fromBlock, toBlock uint64)
 func (lf *LogFetcher) fetchRange(
 	ctx context.Context,
 	fromBlock, toBlock uint64,
-	addresses []common.Address,
-	topics [][]common.Hash,
+	addresses []ethcommon.Address,
+	topics [][]ethcommon.Hash,
 ) (*fetcher.FetchResult, error) {
 	lf.log.Debugw("fetching range",
 		"from_block", fromBlock,
@@ -102,8 +103,8 @@ func (lf *LogFetcher) fetchRange(
 	)
 
 	// Build dynamic filter with only addresses that have reached their start block
-	activeAddresses := make([]common.Address, 0, len(addresses))
-	activeTopics := make([][]common.Hash, 0, len(topics))
+	activeAddresses := make([]ethcommon.Address, 0, len(addresses))
+	activeTopics := make([][]ethcommon.Hash, 0, len(topics))
 
 	for i, addr := range addresses {
 		startBlock, exists := lf.cfg.AddressStartBlocks[addr]
@@ -116,31 +117,16 @@ func (lf *LogFetcher) fetchRange(
 		}
 	}
 
-	// Fetch block headers first (needed for reorg detection even if no logs)
-	blockNumbers := make([]uint64, 0, toBlock-fromBlock+1)
-	for blockNum := fromBlock; blockNum <= toBlock; blockNum++ {
-		blockNumbers = append(blockNumbers, blockNum)
-	}
-
-	headers, err := lf.rpc.BatchGetBlockHeaders(ctx, blockNumbers)
-	if err != nil {
-		return nil, fmt.Errorf("failed to fetch headers: %w", err)
-	}
-
-	var logs []types.Log
+	var (
+		logs           []types.Log
+		newFrom, newTo = fromBlock, toBlock
+		err            error
+	)
 
 	// Only fetch logs if we have active addresses
 	if len(activeAddresses) > 0 {
-		// Build the filter query
-		query := ethereum.FilterQuery{
-			FromBlock: big.NewInt(int64(fromBlock)),
-			ToBlock:   big.NewInt(int64(toBlock)),
-			Addresses: activeAddresses,
-			Topics:    activeTopics,
-		}
-
-		// Fetch logs
-		logs, err = lf.rpc.GetLogs(ctx, query)
+		// Fetch logs with automatic retry on "too many results" error
+		logs, newFrom, newTo, err = lf.fetchLogsWithRetry(ctx, fromBlock, toBlock, activeAddresses, activeTopics)
 		if err != nil {
 			return nil, fmt.Errorf("failed to fetch logs: %w", err)
 		}
@@ -162,9 +148,17 @@ func (lf *LogFetcher) fetchRange(
 		)
 	}
 
+	// Store fetched logs
+	if err := lf.logStore.StoreLogs(ctx,
+		activeAddresses, activeTopics, logs,
+		fromBlock, toBlock); err != nil {
+		return nil, fmt.Errorf("failed to store logs: %w", err)
+	}
+
 	// Verify consistency and record blocks
 	// The reorg detector will verify headers and detect any reorgs
-	if err := lf.reorgDetector.VerifyAndRecordBlocks(ctx, logs, fromBlock, toBlock); err != nil {
+	headers, err := lf.reorgDetector.VerifyAndRecordBlocks(ctx, logs, fromBlock, toBlock)
+	if err != nil {
 		// If reorg detected, invalidate cache
 		var reorgErr *reorg.ReorgDetectedError
 		if errors.As(err, &reorgErr) {
@@ -184,14 +178,13 @@ func (lf *LogFetcher) fetchRange(
 		"from_block", fromBlock,
 		"to_block", toBlock,
 		"logs_count", len(logs),
-		"blocks_count", len(headers),
 	)
 
 	return &fetcher.FetchResult{
 		Logs:      logs,
 		Headers:   headers,
-		FromBlock: fromBlock,
-		ToBlock:   toBlock,
+		FromBlock: newFrom,
+		ToBlock:   newTo,
 	}, nil
 }
 
@@ -225,7 +218,7 @@ func (lf *LogFetcher) fetchBackfill(
 		return nil, fmt.Errorf("failed to get unsynced topics: %w", err)
 	}
 
-	if !nonSyncedLogs.IsEmpty() {
+	if !nonSyncedLogs.IsEmpty() && nonSyncedLogs.ShouldCatchUp(lastIndexedBlock, downloaderStartBlock) {
 		lf.log.Info("found unsynced logs, syncing them first")
 
 		unsyncedAddresses, unsyncedTopics, lastCoveredBlock := nonSyncedLogs.GetAddressesAndTopics()
@@ -251,7 +244,7 @@ func (lf *LogFetcher) fetchBackfill(
 	toBlock := min(fromBlock+lf.cfg.ChunkSize-1, finalizedBlock)
 
 	// Check if we've caught up
-	if fromBlock > finalizedBlock {
+	if fromBlock >= finalizedBlock {
 		lf.log.Info("backfill complete, switching to live mode")
 		lf.mode = fetcher.ModeLive
 		return lf.fetchLive(ctx, lastIndexedBlock)
@@ -327,4 +320,62 @@ func (lf *LogFetcher) getFinalizedBlock(ctx context.Context) (uint64, error) {
 	}
 
 	return header.Number.Uint64(), nil
+}
+
+// fetchLogsWithRetry fetches logs and automatically retries with a smaller range if too many results are returned.
+// This function recursively splits the block range until a successful query is achieved.
+func (lf *LogFetcher) fetchLogsWithRetry(
+	ctx context.Context,
+	fromBlock, toBlock uint64,
+	addresses []ethcommon.Address,
+	topics [][]ethcommon.Hash,
+) ([]types.Log, uint64, uint64, error) {
+	query := ethereum.FilterQuery{
+		FromBlock: big.NewInt(int64(fromBlock)),
+		ToBlock:   big.NewInt(int64(toBlock)),
+		Addresses: addresses,
+		Topics:    topics,
+	}
+
+	logs, err := lf.rpc.GetLogs(ctx, query)
+	if err != nil {
+		// Check if this is a "too many results" error
+		ok, errData := irpc.IsTooManyResultsError(err)
+		if !ok {
+			return nil, 0, 0, err
+		}
+
+		// Try to parse suggested block range from error message
+		var newFrom, newTo uint64
+		if suggestedFrom, suggestedTo, ok := irpc.ParseSuggestedBlockRange(errData); ok {
+			lf.log.Infow("too many logs, retrying with suggested block range",
+				"original_from", fromBlock,
+				"original_to", toBlock,
+				"suggested_from", suggestedFrom,
+				"suggested_to", suggestedTo,
+			)
+			newFrom, newTo = suggestedFrom, suggestedTo
+		} else {
+			// No suggested range, split in half
+			const splitBy = 2
+			mid := (fromBlock + toBlock) / splitBy
+
+			lf.log.Infow("too many logs, retrying with smaller block range (by splitting in half)",
+				"original_from", fromBlock,
+				"original_to", toBlock,
+				"mid", mid,
+			)
+
+			if mid == fromBlock {
+				// Can't split further (single block)
+				return nil, 0, 0, fmt.Errorf("cannot split range further, single block %d has too many logs", fromBlock)
+			}
+
+			newFrom, newTo = fromBlock, mid
+		}
+
+		return lf.fetchLogsWithRetry(ctx, newFrom, newTo, addresses, topics)
+	}
+
+	return logs, fromBlock, toBlock, nil
 }

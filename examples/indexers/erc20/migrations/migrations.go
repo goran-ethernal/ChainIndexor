@@ -9,6 +9,7 @@ import (
 //go:embed 001_initial.sql
 var mig0001 string
 
+// RunMigrations runs all migrations for the ERC20 indexer database.
 func RunMigrations(dbPath string) error {
 	migrations := []db.Migration{
 		{

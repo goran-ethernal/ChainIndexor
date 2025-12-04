@@ -94,29 +94,39 @@ func (c *Client) BatchGetLogs(ctx context.Context, queries []ethereum.FilterQuer
 
 // BatchGetBlockHeaders retrieves headers for multiple block numbers in a single batch call.
 func (c *Client) BatchGetBlockHeaders(ctx context.Context, blockNums []uint64) ([]*types.Header, error) {
-	batch := make([]rpc.BatchElem, len(blockNums))
-	results := make([]*types.Header, len(blockNums))
+	const maxBatch = 100
+	var allResults []*types.Header
 
-	for i, blockNum := range blockNums {
-		batch[i] = rpc.BatchElem{
-			Method: "eth_getBlockByNumber",
-			Args:   []any{toBlockNumArg(blockNum), false}, // false = don't include transactions
-			Result: &results[i],
+	for i := 0; i < len(blockNums); i += maxBatch {
+		end := min(i+maxBatch, len(blockNums))
+		chunk := blockNums[i:end]
+
+		batch := make([]rpc.BatchElem, len(chunk))
+		results := make([]*types.Header, len(chunk))
+
+		for j, blockNum := range chunk {
+			batch[j] = rpc.BatchElem{
+				Method: "eth_getBlockByNumber",
+				Args:   []any{toBlockNumArg(blockNum), false}, // false = don't include transactions
+				Result: &results[j],
+			}
 		}
-	}
 
-	if err := c.rpc.BatchCallContext(ctx, batch); err != nil {
-		return nil, err
-	}
-
-	// Check for individual errors
-	for _, elem := range batch {
-		if elem.Error != nil {
-			return nil, elem.Error
+		if err := c.rpc.BatchCallContext(ctx, batch); err != nil {
+			return nil, err
 		}
+
+		// Check for individual errors
+		for _, elem := range batch {
+			if elem.Error != nil {
+				return nil, elem.Error
+			}
+		}
+
+		allResults = append(allResults, results...)
 	}
 
-	return results, nil
+	return allResults, nil
 }
 
 // toFilterArg converts ethereum.FilterQuery to the format expected by eth_getLogs.

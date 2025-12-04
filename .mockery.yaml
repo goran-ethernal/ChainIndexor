@@ -10,10 +10,10 @@ packages:
     config:
       all: true
       dir: "internal/rpc/mocks"
-  # github.com/goran-ethernal/ChainIndexor/pkg/indexer:
-  #   config:
-  #     all: true
-  #     dir: "internal/indexer/mocks"
+  github.com/goran-ethernal/ChainIndexor/pkg/indexer:
+    config:
+      all: true
+      dir: "internal/indexer/mocks"
   github.com/goran-ethernal/ChainIndexor/pkg/reorg:
     config:
       all: true

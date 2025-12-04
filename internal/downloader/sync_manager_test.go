@@ -1,19 +1,48 @@
 package downloader
 
 import (
+	"database/sql"
 	"os"
 	"testing"
 
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/goran-ethernal/ChainIndexor/internal/db"
 	"github.com/goran-ethernal/ChainIndexor/internal/logger"
+	"github.com/goran-ethernal/ChainIndexor/internal/migrations"
+	"github.com/goran-ethernal/ChainIndexor/pkg/config"
 	"github.com/goran-ethernal/ChainIndexor/pkg/fetcher"
 	"github.com/stretchr/testify/require"
 )
 
+func setupTestDB(t *testing.T) (*sql.DB, func()) {
+	t.Helper()
+
+	tmpDB := t.TempDir() + "/test_downloader.db"
+
+	// Create database config
+	dbConfig := config.DatabaseConfig{
+		Path: tmpDB,
+	}
+	dbConfig.ApplyDefaults()
+
+	err := migrations.RunMigrations(dbConfig.Path)
+	require.NoError(t, err)
+
+	db, err := db.NewSQLiteDBFromConfig(dbConfig)
+	require.NoError(t, err)
+
+	cleanup := func() {
+		os.Remove(tmpDB)
+		db.Close()
+	}
+
+	return db, cleanup
+}
+
 func TestSyncManager(t *testing.T) {
 	// Create a temporary database file
-	tmpDB := t.TempDir() + "/test_sync.db"
-	defer os.Remove(tmpDB)
+	tmpDB, cleanup := setupTestDB(t)
+	defer cleanup()
 
 	log, err := logger.NewLogger("info", true)
 	require.NoError(t, err)
@@ -84,8 +113,8 @@ func TestSyncManager(t *testing.T) {
 
 func TestSyncManagerPersistence(t *testing.T) {
 	// Create a temporary database file
-	tmpDB := t.TempDir() + "/test_sync_persist.db"
-	defer os.Remove(tmpDB)
+	tmpDB, cleanup := setupTestDB(t)
+	defer cleanup()
 
 	log, err := logger.NewLogger("info", true)
 	require.NoError(t, err)
@@ -97,12 +126,10 @@ func TestSyncManagerPersistence(t *testing.T) {
 	persistHash := common.HexToHash("0x123abc")
 	err = sm.SaveCheckpoint(500, persistHash, fetcher.ModeLive)
 	require.NoError(t, err)
-	sm.Close()
 
 	// Create a new SyncManager with the same database
 	sm2, err := NewSyncManager(tmpDB, log)
 	require.NoError(t, err)
-	defer sm2.Close()
 
 	// Verify the checkpoint was persisted
 	state, err := sm2.GetState()
