@@ -86,8 +86,10 @@ func (lf *LogFetcher) GetMode() fetcher.FetchMode {
 
 // FetchRange fetches logs and headers for a specific block range.
 // It verifies consistency using the ReorgDetector and returns an error if a reorg is detected.
-func (lf *LogFetcher) FetchRange(ctx context.Context, fromBlock, toBlock uint64) (*fetcher.FetchResult, error) {
-	return lf.fetchRange(ctx, fromBlock, toBlock, lf.cfg.Addresses, lf.cfg.Topics)
+func (lf *LogFetcher) FetchRange(ctx context.Context,
+	finalizedBlock *types.Header,
+	fromBlock, toBlock uint64) (*fetcher.FetchResult, error) {
+	return lf.fetchRange(ctx, fromBlock, toBlock, lf.cfg.Addresses, lf.cfg.Topics, finalizedBlock)
 }
 
 func (lf *LogFetcher) fetchRange(
@@ -95,6 +97,7 @@ func (lf *LogFetcher) fetchRange(
 	fromBlock, toBlock uint64,
 	addresses []ethcommon.Address,
 	topics [][]ethcommon.Hash,
+	finalizedBlock *types.Header,
 ) (*fetcher.FetchResult, error) {
 	lf.log.Debugw("fetching range",
 		"from_block", fromBlock,
@@ -151,7 +154,8 @@ func (lf *LogFetcher) fetchRange(
 	// Store fetched logs
 	if err := lf.logStore.StoreLogs(ctx,
 		activeAddresses, activeTopics, logs,
-		fromBlock, toBlock); err != nil {
+		fromBlock, toBlock,
+		finalizedBlock); err != nil {
 		return nil, fmt.Errorf("failed to store logs: %w", err)
 	}
 
@@ -211,6 +215,12 @@ func (lf *LogFetcher) fetchBackfill(
 	lastIndexedBlock uint64,
 	downloaderStartBlock uint64,
 ) (*fetcher.FetchResult, error) {
+	// Get the current finalized block
+	finalizedBlock, err := lf.getFinalizedBlock(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get finalized block: %w", err)
+	}
+
 	// check first if there are any unsynced logs
 	// its the logs for indexers that just joined or want to backfill missed logs
 	nonSyncedLogs, err := lf.logStore.GetUnsyncedTopics(ctx, lf.cfg.Addresses, lf.cfg.Topics, lastIndexedBlock)
@@ -231,26 +241,22 @@ func (lf *LogFetcher) fetchBackfill(
 			toBlock,
 			unsyncedAddresses,
 			unsyncedTopics,
+			finalizedBlock,
 		)
 	}
 
-	// Get the current finalized block
-	finalizedBlock, err := lf.getFinalizedBlock(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get finalized block: %w", err)
-	}
-
+	finalizedBlockNum := finalizedBlock.Number.Uint64()
 	fromBlock := lastIndexedBlock + 1
-	toBlock := min(fromBlock+lf.cfg.ChunkSize-1, finalizedBlock)
+	toBlock := min(fromBlock+lf.cfg.ChunkSize-1, finalizedBlockNum)
 
 	// Check if we've caught up
-	if fromBlock >= finalizedBlock {
+	if fromBlock >= finalizedBlockNum {
 		lf.log.Info("backfill complete, switching to live mode")
 		lf.mode = fetcher.ModeLive
 		return lf.fetchLive(ctx, lastIndexedBlock)
 	}
 
-	return lf.FetchRange(ctx, fromBlock, toBlock)
+	return lf.FetchRange(ctx, finalizedBlock, fromBlock, toBlock)
 }
 
 // fetchLive tails new blocks as they become finalized.
@@ -262,9 +268,10 @@ func (lf *LogFetcher) fetchLive(ctx context.Context, lastIndexedBlock uint64) (*
 	}
 
 	fromBlock := lastIndexedBlock + 1
+	finalizedBlockNum := finalizedBlock.Number.Uint64()
 
 	// If we're caught up, wait for new blocks
-	if fromBlock > finalizedBlock {
+	if fromBlock > finalizedBlockNum {
 		lf.log.Debugw("waiting for new blocks",
 			"last_indexed", lastIndexedBlock,
 			"finalized", finalizedBlock,
@@ -279,20 +286,22 @@ func (lf *LogFetcher) fetchLive(ctx context.Context, lastIndexedBlock uint64) (*
 		}
 	}
 
-	toBlock := finalizedBlock
+	toBlock := finalizedBlockNum
 
 	// In live mode, we still chunk to avoid huge fetches if we fall behind
 	if toBlock-fromBlock+1 > lf.cfg.ChunkSize {
 		toBlock = fromBlock + lf.cfg.ChunkSize - 1
 	}
 
-	return lf.FetchRange(ctx, fromBlock, toBlock)
+	return lf.FetchRange(ctx, finalizedBlock, fromBlock, toBlock)
 }
 
 // getFinalizedBlock gets the block number considered finalized based on config.
-func (lf *LogFetcher) getFinalizedBlock(ctx context.Context) (uint64, error) {
-	var header *types.Header
-	var err error
+func (lf *LogFetcher) getFinalizedBlock(ctx context.Context) (*types.Header, error) {
+	var (
+		header *types.Header
+		err    error
+	)
 
 	switch lf.cfg.Finality {
 	case itypes.FinalityFinalized:
@@ -301,25 +310,23 @@ func (lf *LogFetcher) getFinalizedBlock(ctx context.Context) (uint64, error) {
 		header, err = lf.rpc.GetSafeBlockHeader(ctx)
 	case itypes.FinalityLatest:
 		header, err = lf.rpc.GetLatestBlockHeader(ctx)
-		if err == nil && lf.cfg.FinalizedLag > 0 {
+		headerNum := header.Number.Uint64()
+		if err == nil && lf.cfg.FinalizedLag > 0 && headerNum >= lf.cfg.FinalizedLag {
 			// Apply lag to latest block
-			finalizedNum := header.Number.Uint64()
-			if finalizedNum > lf.cfg.FinalizedLag {
-				finalizedNum -= lf.cfg.FinalizedLag
-			} else {
-				finalizedNum = 0
-			}
-			return finalizedNum, nil
+			header, err = lf.rpc.GetBlockHeader(ctx, headerNum-lf.cfg.FinalizedLag)
+		} else {
+			// If lag is zero or latest block number is less than lag, return genesis block
+			header, err = lf.rpc.GetBlockHeader(ctx, 0)
 		}
 	default:
-		return 0, fmt.Errorf("invalid finality mode: %s", lf.cfg.Finality)
+		return nil, fmt.Errorf("invalid finality mode: %s", lf.cfg.Finality)
 	}
 
 	if err != nil {
-		return 0, err
+		return nil, err
 	}
 
-	return header.Number.Uint64(), nil
+	return header, nil
 }
 
 // fetchLogsWithRetry fetches logs and automatically retries with a smaller range if too many results are returned.

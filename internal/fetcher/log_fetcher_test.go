@@ -92,7 +92,8 @@ func TestLogFetcher_FetchRange_Success(t *testing.T) {
 	ctx := context.Background()
 
 	// Create test headers
-	header100 := createTestHeader(100, common.HexToHash("0x99"))
+	finalizedBlock := createTestHeader(99, common.HexToHash("0x99"))
+	header100 := createTestHeader(100, finalizedBlock.Hash())
 	header101 := createTestHeader(101, header100.Hash())
 	header102 := createTestHeader(102, header101.Hash())
 
@@ -112,11 +113,11 @@ func TestLogFetcher_FetchRange_Success(t *testing.T) {
 	}
 
 	mockRPC.EXPECT().GetLogs(ctx, mock.Anything).Return(testLogs, nil).Once()
-	mockStore.EXPECT().StoreLogs(ctx, lf.cfg.Addresses, lf.cfg.Topics, testLogs, uint64(100), uint64(102)).Return(nil).Once()
+	mockStore.EXPECT().StoreLogs(ctx, lf.cfg.Addresses, lf.cfg.Topics, testLogs, uint64(100), uint64(102), finalizedBlock).Return(nil).Once()
 	mockReorg.EXPECT().VerifyAndRecordBlocks(ctx, testLogs, uint64(100), uint64(102)).Return(
 		[]*types.Header{header100, header101, header102}, nil).Once()
 
-	result, err := lf.FetchRange(ctx, 100, 102)
+	result, err := lf.FetchRange(ctx, finalizedBlock, 100, 102)
 	require.NoError(t, err)
 	require.NotNil(t, result)
 	require.Equal(t, uint64(100), result.FromBlock)
@@ -131,7 +132,8 @@ func TestLogFetcher_FetchRange_LogFetchError(t *testing.T) {
 
 	mockRPC.EXPECT().GetLogs(ctx, mock.Anything).Return(nil, errors.New("log fetch error")).Once()
 
-	result, err := lf.FetchRange(ctx, 100, 102)
+	finalizedBlock := createTestHeader(99, common.HexToHash("0x99"))
+	result, err := lf.FetchRange(ctx, finalizedBlock, 100, 102)
 	require.Error(t, err)
 	require.Nil(t, result)
 	require.Contains(t, err.Error(), "failed to fetch logs")
@@ -141,7 +143,8 @@ func TestLogFetcher_FetchRange_ReorgDetected(t *testing.T) {
 	lf, mockRPC, mockReorg, mockStore := setupTestLogFetcher(t)
 	ctx := context.Background()
 
-	header100 := createTestHeader(100, common.HexToHash("0x99"))
+	finalizedBlock := createTestHeader(99, common.HexToHash("0x99"))
+	header100 := createTestHeader(100, finalizedBlock.Hash())
 
 	testLogs := []types.Log{
 		{BlockNumber: 100, BlockHash: header100.Hash()},
@@ -154,12 +157,12 @@ func TestLogFetcher_FetchRange_ReorgDetected(t *testing.T) {
 		Details:         "test reorg",
 	}
 
-	mockStore.EXPECT().StoreLogs(ctx, lf.cfg.Addresses, lf.cfg.Topics, testLogs, uint64(100), uint64(102)).Return(nil).Once()
+	mockStore.EXPECT().StoreLogs(ctx, lf.cfg.Addresses, lf.cfg.Topics, testLogs, uint64(100), uint64(102), finalizedBlock).Return(nil).Once()
 	mockReorg.EXPECT().VerifyAndRecordBlocks(ctx, testLogs, uint64(100), uint64(102)).
 		Return(nil, reorgErr).Once()
 	mockStore.EXPECT().HandleReorg(ctx, uint64(101)).Return(nil).Once()
 
-	result, err := lf.FetchRange(ctx, 100, 102)
+	result, err := lf.FetchRange(ctx, finalizedBlock, 100, 102)
 	require.Error(t, err)
 	require.Nil(t, result)
 	require.Contains(t, err.Error(), "reorg detected")
@@ -172,16 +175,17 @@ func TestLogFetcher_FetchRange_NoActiveAddresses(t *testing.T) {
 	// Set start block beyond the range we're fetching
 	lf.cfg.AddressStartBlocks[lf.cfg.Addresses[0]] = 200
 
-	header100 := createTestHeader(100, common.HexToHash("0x99"))
+	finalizedBlock := createTestHeader(99, common.HexToHash("0x99"))
+	header100 := createTestHeader(100, finalizedBlock.Hash())
 	header101 := createTestHeader(101, header100.Hash())
 
 	// No GetLogs call should be made since no addresses are active
 	emptyLogs := []types.Log{}
-	mockStore.EXPECT().StoreLogs(ctx, []common.Address{}, [][]common.Hash{}, emptyLogs, uint64(100), uint64(101)).Return(nil).Once()
+	mockStore.EXPECT().StoreLogs(ctx, []common.Address{}, [][]common.Hash{}, emptyLogs, uint64(100), uint64(101), finalizedBlock).Return(nil).Once()
 	mockReorg.EXPECT().VerifyAndRecordBlocks(ctx, emptyLogs, uint64(100), uint64(101)).
 		Return([]*types.Header{header100, header101}, nil).Once()
 
-	result, err := lf.FetchRange(ctx, 100, 101)
+	result, err := lf.FetchRange(ctx, finalizedBlock, 100, 101)
 	require.NoError(t, err)
 	require.NotNil(t, result)
 	require.Len(t, result.Logs, 0)
@@ -212,7 +216,7 @@ func TestLogFetcher_FetchBackfill_Success(t *testing.T) {
 
 	testLogs := []types.Log{{BlockNumber: 51}}
 	mockRPC.EXPECT().GetLogs(ctx, mock.Anything).Return(testLogs, nil).Once()
-	mockStore.EXPECT().StoreLogs(ctx, lf.cfg.Addresses, lf.cfg.Topics, testLogs, uint64(51), uint64(150)).Return(nil).Once()
+	mockStore.EXPECT().StoreLogs(ctx, lf.cfg.Addresses, lf.cfg.Topics, testLogs, uint64(51), uint64(150), finalizedHeader).Return(nil).Once()
 	mockReorg.EXPECT().VerifyAndRecordBlocks(ctx, testLogs, uint64(51), uint64(150)).Return(headers, nil).Once()
 
 	result, err := lf.FetchNext(ctx, 50, 0)
@@ -237,6 +241,7 @@ func TestLogFetcher_FetchBackfill_WithUnsyncedTopics(t *testing.T) {
 		Return(unsyncedTopics, nil).Once()
 
 	// Should fetch from lastCoveredBlock+1 (26) to min(26+chunkSize-1, lastIndexedBlock) = min(125, 50) = 50
+	finalizedBlock := createTestHeader(99, common.HexToHash("0x99"))
 	headers := make([]*types.Header, 25)
 	blockNums := make([]uint64, 25)
 	for i := range 25 {
@@ -245,8 +250,9 @@ func TestLogFetcher_FetchBackfill_WithUnsyncedTopics(t *testing.T) {
 	}
 
 	testLogs := []types.Log{{BlockNumber: 26}}
+	mockRPC.EXPECT().GetFinalizedBlockHeader(ctx).Return(finalizedBlock, nil).Once()
 	mockRPC.EXPECT().GetLogs(ctx, mock.Anything).Return(testLogs, nil).Once()
-	mockStore.EXPECT().StoreLogs(ctx, lf.cfg.Addresses, lf.cfg.Topics, testLogs, uint64(26), uint64(50)).Return(nil).Once()
+	mockStore.EXPECT().StoreLogs(ctx, lf.cfg.Addresses, lf.cfg.Topics, testLogs, uint64(26), uint64(50), finalizedBlock).Return(nil).Once()
 	mockReorg.EXPECT().VerifyAndRecordBlocks(ctx, testLogs, uint64(26), uint64(50)).Return(headers, nil).Once()
 
 	result, err := lf.FetchNext(ctx, 50, 0)
@@ -296,7 +302,7 @@ func TestLogFetcher_FetchLive_NewBlocks(t *testing.T) {
 
 	testLogs := []types.Log{{BlockNumber: 101}}
 	mockRPC.EXPECT().GetLogs(ctx, mock.Anything).Return(testLogs, nil).Once()
-	mockStore.EXPECT().StoreLogs(ctx, lf.cfg.Addresses, lf.cfg.Topics, testLogs, uint64(101), uint64(105)).Return(nil).Once()
+	mockStore.EXPECT().StoreLogs(ctx, lf.cfg.Addresses, lf.cfg.Topics, testLogs, uint64(101), uint64(105), finalizedHeader).Return(nil).Once()
 	mockReorg.EXPECT().VerifyAndRecordBlocks(ctx, testLogs, uint64(101), uint64(105)).Return(headers, nil).Once()
 
 	result, err := lf.FetchNext(ctx, 100, 0)
@@ -325,7 +331,7 @@ func TestLogFetcher_FetchLive_ChunksLargeRanges(t *testing.T) {
 
 	testLogs := []types.Log{{BlockNumber: 101}}
 	mockRPC.EXPECT().GetLogs(ctx, mock.Anything).Return(testLogs, nil).Once()
-	mockStore.EXPECT().StoreLogs(ctx, lf.cfg.Addresses, lf.cfg.Topics, testLogs, uint64(101), uint64(110)).Return(nil).Once()
+	mockStore.EXPECT().StoreLogs(ctx, lf.cfg.Addresses, lf.cfg.Topics, testLogs, uint64(101), uint64(110), finalizedHeader).Return(nil).Once()
 	mockReorg.EXPECT().VerifyAndRecordBlocks(ctx, testLogs, uint64(101), uint64(110)).Return(headers, nil).Once()
 
 	result, err := lf.FetchNext(ctx, 100, 0)
@@ -343,9 +349,9 @@ func TestLogFetcher_GetFinalizedBlock_Finalized(t *testing.T) {
 	header := createTestHeader(100, common.HexToHash("0x99"))
 	mockRPC.EXPECT().GetFinalizedBlockHeader(ctx).Return(header, nil).Once()
 
-	blockNum, err := lf.getFinalizedBlock(ctx)
+	finalizedBlock, err := lf.getFinalizedBlock(ctx)
 	require.NoError(t, err)
-	require.Equal(t, uint64(100), blockNum)
+	require.Equal(t, header, finalizedBlock)
 }
 
 func TestLogFetcher_GetFinalizedBlock_Safe(t *testing.T) {
@@ -356,9 +362,9 @@ func TestLogFetcher_GetFinalizedBlock_Safe(t *testing.T) {
 	header := createTestHeader(98, common.HexToHash("0x97"))
 	mockRPC.EXPECT().GetSafeBlockHeader(ctx).Return(header, nil).Once()
 
-	blockNum, err := lf.getFinalizedBlock(ctx)
+	finalizedBlock, err := lf.getFinalizedBlock(ctx)
 	require.NoError(t, err)
-	require.Equal(t, uint64(98), blockNum)
+	require.Equal(t, header, finalizedBlock)
 }
 
 func TestLogFetcher_GetFinalizedBlock_LatestWithLag(t *testing.T) {
@@ -369,10 +375,12 @@ func TestLogFetcher_GetFinalizedBlock_LatestWithLag(t *testing.T) {
 
 	header := createTestHeader(100, common.HexToHash("0x99"))
 	mockRPC.EXPECT().GetLatestBlockHeader(ctx).Return(header, nil).Once()
+	blockWithLag := createTestHeader(90, common.HexToHash("0x89"))
+	mockRPC.EXPECT().GetBlockHeader(ctx, uint64(90)).Return(blockWithLag, nil).Once()
 
-	blockNum, err := lf.getFinalizedBlock(ctx)
+	finalizedBlock, err := lf.getFinalizedBlock(ctx)
 	require.NoError(t, err)
-	require.Equal(t, uint64(90), blockNum) // 100 - 10
+	require.Equal(t, blockWithLag, finalizedBlock) // 100 - 10
 }
 
 func TestLogFetcher_GetFinalizedBlock_LatestWithLagBelowZero(t *testing.T) {
@@ -383,10 +391,12 @@ func TestLogFetcher_GetFinalizedBlock_LatestWithLagBelowZero(t *testing.T) {
 
 	header := createTestHeader(100, common.HexToHash("0x99"))
 	mockRPC.EXPECT().GetLatestBlockHeader(ctx).Return(header, nil).Once()
+	genesisBlock := createTestHeader(0, common.Hash{})
+	mockRPC.EXPECT().GetBlockHeader(ctx, uint64(0)).Return(genesisBlock, nil).Once()
 
-	blockNum, err := lf.getFinalizedBlock(ctx)
+	finalizedBlock, err := lf.getFinalizedBlock(ctx)
 	require.NoError(t, err)
-	require.Equal(t, uint64(0), blockNum) // Can't go below 0
+	require.Equal(t, genesisBlock, finalizedBlock) // Can't go below 0
 }
 
 func TestLogFetcher_GetFinalizedBlock_InvalidMode(t *testing.T) {
@@ -394,8 +404,8 @@ func TestLogFetcher_GetFinalizedBlock_InvalidMode(t *testing.T) {
 	lf.cfg.Finality = "invalid"
 	ctx := context.Background()
 
-	blockNum, err := lf.getFinalizedBlock(ctx)
+	finalizedBlock, err := lf.getFinalizedBlock(ctx)
 	require.Error(t, err)
-	require.Equal(t, uint64(0), blockNum)
+	require.Nil(t, finalizedBlock)
 	require.Contains(t, err.Error(), "invalid finality mode")
 }

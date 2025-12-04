@@ -159,6 +159,7 @@ func (s *LogStore) StoreLogs(
 	topics [][]common.Hash,
 	logs []types.Log,
 	fromBlock, toBlock uint64,
+	latestFinalizedBlock *types.Header,
 ) error {
 	if len(addresses) != len(topics) {
 		return fmt.Errorf("addresses and topics length mismatch: %d vs %d", len(addresses), len(topics))
