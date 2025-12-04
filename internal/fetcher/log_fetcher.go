@@ -22,7 +22,7 @@ import (
 // Compile-time check to ensure LogFetcher implements fetcher.LogFetcher interface.
 var _ fetcher.LogFetcher = (*LogFetcher)(nil)
 
-const ethereumBlockTime = 2 * time.Second
+const ethereumBlockTime = 12 * time.Second
 
 // LogFetcherConfig contains configuration for the LogFetcher.
 type LogFetcherConfig struct {
