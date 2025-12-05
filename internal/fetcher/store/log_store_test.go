@@ -985,10 +985,7 @@ func TestLogStore_RetentionPolicy(t *testing.T) {
 		// Store in chunks to simulate real usage
 		chunkSize := 100
 		for i := 0; i < len(allLogs); i += chunkSize * 4 { // 4 logs per block
-			end := i + chunkSize*4
-			if end > len(allLogs) {
-				end = len(allLogs)
-			}
+			end := min(i+chunkSize*4, len(allLogs))
 			chunk := allLogs[i:end]
 			fromBlock := chunk[0].BlockNumber
 			toBlock := chunk[len(chunk)-1].BlockNumber
@@ -1093,10 +1090,7 @@ func TestLogStore_RetentionPolicy(t *testing.T) {
 		// Store in chunks
 		chunkSize := 500
 		for i := 0; i < len(allLogs); i += chunkSize {
-			end := i + chunkSize
-			if end > len(allLogs) {
-				end = len(allLogs)
-			}
+			end := min(i+chunkSize, len(allLogs))
 			chunk := allLogs[i:end]
 			fromBlock := chunk[0].BlockNumber
 			toBlock := chunk[len(chunk)-1].BlockNumber
@@ -1174,7 +1168,7 @@ func TestLogStore_RetentionPolicy(t *testing.T) {
 		// Store logs with large data to quickly hit size limit
 		var allLogs []types.Log
 		for block := uint64(1000); block < 3000; block++ {
-			for i := uint(0); i < 3; i++ {
+			for i := range uint(3) {
 				log := createTestLog(address, block, common.BytesToHash([]byte{byte(block), byte(i)}), i)
 				log.Data = make([]byte, 200)
 				allLogs = append(allLogs, log)
@@ -1184,10 +1178,7 @@ func TestLogStore_RetentionPolicy(t *testing.T) {
 		// Store all logs
 		chunkSize := 300
 		for i := 0; i < len(allLogs); i += chunkSize {
-			end := i + chunkSize
-			if end > len(allLogs) {
-				end = len(allLogs)
-			}
+			end := min(i+chunkSize, len(allLogs))
 			chunk := allLogs[i:end]
 			fromBlock := chunk[0].BlockNumber
 			toBlock := chunk[len(chunk)-1].BlockNumber
