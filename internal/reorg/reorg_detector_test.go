@@ -33,7 +33,7 @@ func setupTestReorgDetector(t *testing.T) (*ReorgDetector, *mocks.EthClient, fun
 	dbConfig := config.DatabaseConfig{Path: dbPath}
 	dbConfig.ApplyDefaults()
 
-	err = migrations.RunMigrations(dbConfig.Path)
+	err = migrations.RunMigrations(dbConfig)
 	require.NoError(t, err)
 
 	database, err := db.NewSQLiteDBFromConfig(dbConfig)

@@ -189,7 +189,7 @@ func (d *Downloader) Download(ctx context.Context) error {
 	d.mu.RUnlock()
 
 	// Create LogStore using the sync manager's database connection
-	logStore := store.NewLogStore(d.syncManager.DB(), d.log)
+	logStore := store.NewLogStore(d.syncManager.DB(), d.log, d.cfg.DB, d.cfg.RetentionPolicy)
 
 	d.logFetcher = fetcher.NewLogFetcher(fetcher.LogFetcherConfig{
 		ChunkSize:          d.cfg.ChunkSize,

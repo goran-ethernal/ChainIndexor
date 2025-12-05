@@ -25,7 +25,7 @@ func setupTestDB(t *testing.T) (*sql.DB, func()) {
 	}
 	dbConfig.ApplyDefaults()
 
-	err := migrations.RunMigrations(dbConfig.Path)
+	err := migrations.RunMigrations(dbConfig)
 	require.NoError(t, err)
 
 	db, err := db.NewSQLiteDBFromConfig(dbConfig)

@@ -22,3 +22,13 @@ func ParseUint64orHex(val *string) (uint64, error) {
 
 	return strconv.ParseUint(str, base, 64)
 }
+
+const bytesInMB = 1024 * 1024
+
+func MBToBytes(mb uint64) uint64 {
+	return mb * bytesInMB
+}
+
+func BytesToMB(bytes uint64) uint64 {
+	return bytes / bytesInMB
+}

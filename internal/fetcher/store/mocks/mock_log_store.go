@@ -297,17 +297,17 @@ func (_c *LogStore_PruneLogsBeforeBlock_Call) RunAndReturn(run func(context.Cont
 	return _c
 }
 
-// StoreLogs provides a mock function with given fields: ctx, addresses, topics, logs, fromBlock, toBlock
-func (_m *LogStore) StoreLogs(ctx context.Context, addresses []common.Address, topics [][]common.Hash, logs []types.Log, fromBlock uint64, toBlock uint64) error {
-	ret := _m.Called(ctx, addresses, topics, logs, fromBlock, toBlock)
+// StoreLogs provides a mock function with given fields: ctx, addresses, topics, logs, fromBlock, toBlock, lastFinalizedBlock
+func (_m *LogStore) StoreLogs(ctx context.Context, addresses []common.Address, topics [][]common.Hash, logs []types.Log, fromBlock uint64, toBlock uint64, lastFinalizedBlock *types.Header) error {
+	ret := _m.Called(ctx, addresses, topics, logs, fromBlock, toBlock, lastFinalizedBlock)
 
 	if len(ret) == 0 {
 		panic("no return value specified for StoreLogs")
 	}
 
 	var r0 error
-	if rf, ok := ret.Get(0).(func(context.Context, []common.Address, [][]common.Hash, []types.Log, uint64, uint64) error); ok {
-		r0 = rf(ctx, addresses, topics, logs, fromBlock, toBlock)
+	if rf, ok := ret.Get(0).(func(context.Context, []common.Address, [][]common.Hash, []types.Log, uint64, uint64, *types.Header) error); ok {
+		r0 = rf(ctx, addresses, topics, logs, fromBlock, toBlock, lastFinalizedBlock)
 	} else {
 		r0 = ret.Error(0)
 	}
@@ -327,13 +327,14 @@ type LogStore_StoreLogs_Call struct {
 //   - logs []types.Log
 //   - fromBlock uint64
 //   - toBlock uint64
-func (_e *LogStore_Expecter) StoreLogs(ctx interface{}, addresses interface{}, topics interface{}, logs interface{}, fromBlock interface{}, toBlock interface{}) *LogStore_StoreLogs_Call {
-	return &LogStore_StoreLogs_Call{Call: _e.mock.On("StoreLogs", ctx, addresses, topics, logs, fromBlock, toBlock)}
+//   - lastFinalizedBlock *types.Header
+func (_e *LogStore_Expecter) StoreLogs(ctx interface{}, addresses interface{}, topics interface{}, logs interface{}, fromBlock interface{}, toBlock interface{}, lastFinalizedBlock interface{}) *LogStore_StoreLogs_Call {
+	return &LogStore_StoreLogs_Call{Call: _e.mock.On("StoreLogs", ctx, addresses, topics, logs, fromBlock, toBlock, lastFinalizedBlock)}
 }
 
-func (_c *LogStore_StoreLogs_Call) Run(run func(ctx context.Context, addresses []common.Address, topics [][]common.Hash, logs []types.Log, fromBlock uint64, toBlock uint64)) *LogStore_StoreLogs_Call {
+func (_c *LogStore_StoreLogs_Call) Run(run func(ctx context.Context, addresses []common.Address, topics [][]common.Hash, logs []types.Log, fromBlock uint64, toBlock uint64, lastFinalizedBlock *types.Header)) *LogStore_StoreLogs_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context), args[1].([]common.Address), args[2].([][]common.Hash), args[3].([]types.Log), args[4].(uint64), args[5].(uint64))
+		run(args[0].(context.Context), args[1].([]common.Address), args[2].([][]common.Hash), args[3].([]types.Log), args[4].(uint64), args[5].(uint64), args[6].(*types.Header))
 	})
 	return _c
 }
@@ -343,7 +344,7 @@ func (_c *LogStore_StoreLogs_Call) Return(_a0 error) *LogStore_StoreLogs_Call {
 	return _c
 }
 
-func (_c *LogStore_StoreLogs_Call) RunAndReturn(run func(context.Context, []common.Address, [][]common.Hash, []types.Log, uint64, uint64) error) *LogStore_StoreLogs_Call {
+func (_c *LogStore_StoreLogs_Call) RunAndReturn(run func(context.Context, []common.Address, [][]common.Hash, []types.Log, uint64, uint64, *types.Header) error) *LogStore_StoreLogs_Call {
 	_c.Call.Return(run)
 	return _c
 }

@@ -28,6 +28,9 @@ type DownloaderConfig struct {
 
 	// DB contains database configuration for the downloader
 	DB DatabaseConfig `yaml:"db" json:"db" toml:"db"`
+
+	// RetentionPolicy contains optional database retention policy settings
+	RetentionPolicy *RetentionPolicyConfig `yaml:"retention_policy,omitempty"`
 }
 
 // ApplyDefaults sets default values for optional downloader configuration fields.
@@ -94,6 +97,20 @@ func (d *DatabaseConfig) ApplyDefaults() {
 		d.MaxIdleConnections = 5
 	}
 	// EnableForeignKeys defaults to false (zero value)
+}
+
+// RetentionPolicyConfig represents database retention policy settings.
+type RetentionPolicyConfig struct {
+	// MaxDBSizeMB is the maximum database size in megabytes (0 = unlimited)
+	MaxDBSizeMB uint64 `yaml:"max_db_size_mb"`
+
+	// MaxBlocksFromFinalized is blocks to keep behind finalized (0 = keep all)
+	MaxBlocksFromFinalized uint64 `yaml:"max_blocks_from_finalized"`
+}
+
+// IsEnabled returns true if retention policy should be applied
+func (r *RetentionPolicyConfig) IsEnabled() bool {
+	return r != nil && (r.MaxDBSizeMB > 0 || r.MaxBlocksFromFinalized > 0)
 }
 
 // IndexerConfig represents the configuration for a single indexer.
