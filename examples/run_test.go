@@ -30,7 +30,7 @@ func TestRun(t *testing.T) {
 		t.Fatalf("failed to create RPC client: %v", err)
 	}
 
-	err = downloadermig.RunMigrations(cfg.Downloader.DB.Path)
+	err = downloadermig.RunMigrations(cfg.Downloader.DB)
 	if err != nil {
 		t.Fatalf("failed to run migrations: %v", err)
 	}

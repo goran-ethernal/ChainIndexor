@@ -70,7 +70,7 @@ type ERC20TokenIndexer struct {
 // NewERC20TokenIndexer creates a new ERC20 token indexer.
 func NewERC20TokenIndexer(cfg config.IndexerConfig, log *logger.Logger) (*ERC20TokenIndexer, error) {
 	// Run migrations to set up the database schema
-	if err := migrations.RunMigrations(cfg.DB.Path); err != nil {
+	if err := migrations.RunMigrations(cfg.DB); err != nil {
 		return nil, fmt.Errorf("failed to run migrations: %w", err)
 	}
 

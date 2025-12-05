@@ -4,13 +4,14 @@ import (
 	_ "embed"
 
 	"github.com/goran-ethernal/ChainIndexor/internal/db"
+	"github.com/goran-ethernal/ChainIndexor/pkg/config"
 )
 
 //go:embed 001_initial.sql
 var mig0001 string
 
 // RunMigrations runs all migrations for the ERC20 indexer database.
-func RunMigrations(dbPath string) error {
+func RunMigrations(dbConfig config.DatabaseConfig) error {
 	migrations := []db.Migration{
 		{
 			ID:  "001_initial.sql",
@@ -18,5 +19,5 @@ func RunMigrations(dbPath string) error {
 		},
 	}
 
-	return db.RunMigrations(dbPath, migrations)
+	return db.RunMigrations(dbConfig, migrations)
 }

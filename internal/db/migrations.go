@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/goran-ethernal/ChainIndexor/internal/logger"
+	"github.com/goran-ethernal/ChainIndexor/pkg/config"
 	_ "github.com/mattn/go-sqlite3"
 	migrate "github.com/rubenv/sql-migrate"
 )
@@ -26,22 +27,29 @@ type Migration struct {
 // RunMigrations will execute pending migrations if needed to keep
 // the database updated with the latest changes in either direction,
 // up or down.
-func RunMigrations(dbPath string, migrations []Migration) error {
-	db, err := NewSQLiteDB(dbPath)
+func RunMigrations(dbConfig config.DatabaseConfig, migrations []Migration) error {
+	db, err := NewSQLiteDBFromConfig(dbConfig)
 	if err != nil {
 		return fmt.Errorf("error creating DB %w", err)
 	}
-	return RunMigrationsDB(logger.GetDefaultLogger(), db, migrations)
+	defer func() {
+		err := db.Close()
+		if err != nil {
+			logger.GetDefaultLogger().Errorf("error closing DB: %v", err)
+		}
+	}()
+
+	return runMigrationsDB(logger.GetDefaultLogger(), db, migrations)
 }
 
-func RunMigrationsDB(logger *logger.Logger, db *sql.DB, migrationsParam []Migration) error {
-	return RunMigrationsDBExtended(logger, db, migrationsParam, migrate.Up, NoLimitMigrations)
+func runMigrationsDB(logger *logger.Logger, db *sql.DB, migrationsParam []Migration) error {
+	return runMigrationsDBExtended(logger, db, migrationsParam, migrate.Up, NoLimitMigrations)
 }
 
-// RunMigrationsDBExtended is an extended version of RunMigrationsDB that allows
+// runMigrationsDBExtended is an extended version of RunMigrationsDB that allows
 // dir: can be migrate.Up or migrate.Down
 // maxMigrations: Will apply at most `max` migrations. Pass 0 for no limit (or use Exec)
-func RunMigrationsDBExtended(logger *logger.Logger,
+func runMigrationsDBExtended(logger *logger.Logger,
 	db *sql.DB,
 	migrationsParam []Migration,
 	dir migrate.MigrationDirection,

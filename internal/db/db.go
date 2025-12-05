@@ -20,19 +20,12 @@ func ensureDBFolder(dbPath string) error {
 	return os.MkdirAll(dir, dbFolderPerm)
 }
 
-// NewSQLiteDB creates a new SQLite DB
-func NewSQLiteDB(dbPath string) (*sql.DB, error) {
-	if err := ensureDBFolder(dbPath); err != nil {
-		return nil, fmt.Errorf("failed to ensure DB folder: %w", err)
-	}
-	return sql.Open("sqlite3", fmt.Sprintf(
-		"file:%s?_txlock=immediate&_foreign_keys=on&_journal_mode=WAL&_busy_timeout=30000",
-		dbPath,
-	))
-}
-
 // NewSQLiteDBFromConfig creates a new SQLite DB with the given configuration.
 func NewSQLiteDBFromConfig(cfg config.DatabaseConfig) (*sql.DB, error) {
+	if err := ensureDBFolder(cfg.Path); err != nil {
+		return nil, fmt.Errorf("failed to ensure DB folder: %w", err)
+	}
+
 	// Build connection string with configuration options
 	foreignKeys := "off"
 	if cfg.EnableForeignKeys {
@@ -74,7 +67,7 @@ func NewSQLiteDBFromConfig(cfg config.DatabaseConfig) (*sql.DB, error) {
 
 // DBTotalSize returns the combined size of the SQLite main file + WAL + SHM.
 // If WAL/SHM do not exist, they are simply ignored.
-func DBTotalSize(db *sql.DB, dbPath string) (int64, error) {
+func DBTotalSize(dbPath string) (int64, error) {
 	total := int64(0)
 
 	// Check main database file

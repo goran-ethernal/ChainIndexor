@@ -556,11 +556,11 @@ func (s *LogStore) applyRetentionIfNeeded(
 
 // getDatabaseSizeMB returns the current database size in megabytes
 func (s *LogStore) getDatabaseSizeMB() (uint64, error) {
-	sizeBytes, err := db.DBTotalSize(s.db, s.dbConfig.Path)
+	sizeBytes, err := db.DBTotalSize(s.dbConfig.Path)
 	if err != nil {
 		return 0, err
 	}
-	return uint64(sizeBytes) / (1024 * 1024), nil
+	return common.BytesToMB(uint64(sizeBytes)), nil
 }
 
 // calculateBlocksToFreeSpace estimates which block to prune to free the target space
@@ -639,12 +639,13 @@ func (s *LogStore) calculateBlocksToFreeSpace(ctx context.Context, currentMB, ma
 	}
 
 	blocksToDelete := uint64(int64(targetBytes) / bytesFreedPerBlock)
+	const safetyMarginPercent = 10
 
 	// Add safety margin (10%) since this is an estimate
-	blocksToDelete += blocksToDelete / 10
+	blocksToDelete += blocksToDelete / safetyMarginPercent
 
 	if blocksToDelete == 0 {
-		blocksToDelete = totalBlocks / 10 // fallback: delete 10% of blocks
+		blocksToDelete = totalBlocks / safetyMarginPercent // fallback: delete 10% of blocks
 	}
 
 	// Ensure we don't try to delete more blocks than we have

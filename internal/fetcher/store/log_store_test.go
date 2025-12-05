@@ -26,16 +26,18 @@ func setupTestLogStore(t *testing.T) (*LogStore, func()) {
 
 	dbPath := tmpFile.Name()
 
+	dbConfig := config.DatabaseConfig{Path: dbPath}
+	dbConfig.ApplyDefaults()
+
 	// Create database
-	sqlDB, err := db.NewSQLiteDB(dbPath)
+	sqlDB, err := db.NewSQLiteDBFromConfig(dbConfig)
 	require.NoError(t, err)
 
 	// Run migrations
-	err = migrations.RunMigrations(dbPath)
+	err = migrations.RunMigrations(dbConfig)
 	require.NoError(t, err)
 
 	// Create log store with proper dbConfig
-	dbConfig := config.DatabaseConfig{Path: dbPath}
 	store := NewLogStore(sqlDB, logger.GetDefaultLogger(), dbConfig, nil)
 
 	cleanup := func() {
@@ -744,7 +746,7 @@ func TestLogStore_CalculateBlocksToFreeSpace(t *testing.T) {
 		var logs []types.Log
 		for block := blockStart; block <= blockEnd; block++ {
 			// Create varying number of logs per block (1-11 logs)
-			numLogs := int((block % 10) + 1)
+			numLogs := (block % 10) + 1
 			for i := range numLogs {
 				// Alternate between addresses
 				addr := address1
@@ -786,7 +788,7 @@ func TestLogStore_CalculateBlocksToFreeSpace(t *testing.T) {
 	}
 
 	// Get initial database size in bytes for more precision
-	initialSizeBytes, err := db.DBTotalSize(store.db, store.dbConfig.Path)
+	initialSizeBytes, err := db.DBTotalSize(store.dbConfig.Path)
 	require.NoError(t, err)
 	initialSize := uint64(initialSizeBytes) / (1024 * 1024) // Convert to MB
 	t.Logf("Initial database size: %d MB (%d bytes)", initialSize, initialSizeBytes)
@@ -833,7 +835,7 @@ func TestLogStore_CalculateBlocksToFreeSpace(t *testing.T) {
 	require.Greater(t, blocksPruned, uint64(0), "should have pruned some blocks")
 
 	// Wait a moment for filesystem to sync
-	sizeAfterBytes, err := db.DBTotalSize(store.db, store.dbConfig.Path)
+	sizeAfterBytes, err := db.DBTotalSize(store.dbConfig.Path)
 	require.NoError(t, err)
 	sizeAfter := uint64(sizeAfterBytes) / (1024 * 1024)
 
@@ -948,11 +950,13 @@ func TestLogStore_RetentionPolicy(t *testing.T) {
 		dbPath := tmpFile.Name()
 		defer os.Remove(dbPath)
 
-		sqlDB, err := db.NewSQLiteDB(dbPath)
+		dbConfig := config.DatabaseConfig{Path: dbPath}
+		dbConfig.ApplyDefaults()
+		sqlDB, err := db.NewSQLiteDBFromConfig(dbConfig)
 		require.NoError(t, err)
 		defer sqlDB.Close()
 
-		err = migrations.RunMigrations(dbPath)
+		err = migrations.RunMigrations(dbConfig)
 		require.NoError(t, err)
 
 		// Retention policy: keep only 100 blocks from finalized
@@ -961,7 +965,6 @@ func TestLogStore_RetentionPolicy(t *testing.T) {
 			MaxDBSizeMB:            0, // disabled
 		}
 
-		dbConfig := config.DatabaseConfig{Path: dbPath}
 		store := NewLogStore(sqlDB, logger.GetDefaultLogger(), dbConfig, retentionPolicy)
 
 		ctx := context.Background()
@@ -1052,11 +1055,13 @@ func TestLogStore_RetentionPolicy(t *testing.T) {
 		dbPath := tmpFile.Name()
 		defer os.Remove(dbPath)
 
-		sqlDB, err := db.NewSQLiteDB(dbPath)
+		dbConfig := config.DatabaseConfig{Path: dbPath}
+		dbConfig.ApplyDefaults()
+		sqlDB, err := db.NewSQLiteDBFromConfig(dbConfig)
 		require.NoError(t, err)
 		defer sqlDB.Close()
 
-		err = migrations.RunMigrations(dbPath)
+		err = migrations.RunMigrations(dbConfig)
 		require.NoError(t, err)
 
 		// Retention policy: limit database to 5 MB
@@ -1065,7 +1070,6 @@ func TestLogStore_RetentionPolicy(t *testing.T) {
 			MaxDBSizeMB:            5,
 		}
 
-		dbConfig := config.DatabaseConfig{Path: dbPath}
 		store := NewLogStore(sqlDB, logger.GetDefaultLogger(), dbConfig, retentionPolicy)
 
 		ctx := context.Background()
@@ -1146,11 +1150,14 @@ func TestLogStore_RetentionPolicy(t *testing.T) {
 		dbPath := tmpFile.Name()
 		defer os.Remove(dbPath)
 
-		sqlDB, err := db.NewSQLiteDB(dbPath)
+		dbConfig := config.DatabaseConfig{Path: dbPath}
+		dbConfig.ApplyDefaults()
+
+		sqlDB, err := db.NewSQLiteDBFromConfig(dbConfig)
 		require.NoError(t, err)
 		defer sqlDB.Close()
 
-		err = migrations.RunMigrations(dbPath)
+		err = migrations.RunMigrations(dbConfig)
 		require.NoError(t, err)
 
 		retentionPolicy := &config.RetentionPolicyConfig{
@@ -1158,7 +1165,6 @@ func TestLogStore_RetentionPolicy(t *testing.T) {
 			MaxDBSizeMB:            3,   // limit to 3 MB
 		}
 
-		dbConfig := config.DatabaseConfig{Path: dbPath}
 		store := NewLogStore(sqlDB, logger.GetDefaultLogger(), dbConfig, retentionPolicy)
 
 		ctx := context.Background()
