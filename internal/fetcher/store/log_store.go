@@ -6,9 +6,12 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/ethereum/go-ethereum/common"
+	ethcommon "github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/goran-ethernal/ChainIndexor/internal/common"
+	"github.com/goran-ethernal/ChainIndexor/internal/db"
 	"github.com/goran-ethernal/ChainIndexor/internal/logger"
+	"github.com/goran-ethernal/ChainIndexor/pkg/config"
 	"github.com/goran-ethernal/ChainIndexor/pkg/fetcher/store"
 	"github.com/russross/meddler"
 )
@@ -17,22 +20,32 @@ var _ store.LogStore = (*LogStore)(nil)
 
 // LogStore implements LogStore interface using SQLite as the backend.
 type LogStore struct {
-	db  *sql.DB
-	log *logger.Logger
+	dbConfig config.DatabaseConfig
+	db       *sql.DB
+	log      *logger.Logger
+
+	retentionPolicy *config.RetentionPolicyConfig
 }
 
 // NewLogStore creates a new SQLite-backed LogStore.
-func NewLogStore(db *sql.DB, log *logger.Logger) *LogStore {
+func NewLogStore(
+	db *sql.DB,
+	log *logger.Logger,
+	dbConfig config.DatabaseConfig,
+	retentionPolicy *config.RetentionPolicyConfig,
+) *LogStore {
 	return &LogStore{
-		db:  db,
-		log: log,
+		db:              db,
+		log:             log,
+		dbConfig:        dbConfig,
+		retentionPolicy: retentionPolicy,
 	}
 }
 
 // GetLogs retrieves logs for the given address and block range.
 func (s *LogStore) GetLogs(
 	ctx context.Context,
-	address common.Address,
+	address ethcommon.Address,
 	fromBlock, toBlock uint64,
 ) ([]types.Log, []store.CoverageRange, error) {
 	// Get coverage information
@@ -79,8 +92,8 @@ func (s *LogStore) GetLogs(
 // For each address, it returns the list of topics that are missing coverage up to upToBlock.
 func (s *LogStore) GetUnsyncedTopics(
 	ctx context.Context,
-	addresses []common.Address,
-	topics [][]common.Hash,
+	addresses []ethcommon.Address,
+	topics [][]ethcommon.Hash,
 	upToBlock uint64,
 ) (*store.UnsyncedTopics, error) {
 	result := store.NewUnsyncedTopics()
@@ -155,8 +168,8 @@ func (s *LogStore) hasCompleteCoverage(coverages []*dbTopicCoverage, fromBlock, 
 // StoreLogs saves logs to the store for the given address and block range.
 func (s *LogStore) StoreLogs(
 	ctx context.Context,
-	addresses []common.Address,
-	topics [][]common.Hash,
+	addresses []ethcommon.Address,
+	topics [][]ethcommon.Hash,
 	logs []types.Log,
 	fromBlock, toBlock uint64,
 	latestFinalizedBlock *types.Header,
@@ -170,6 +183,27 @@ func (s *LogStore) StoreLogs(
 		return nil
 	}
 
+	if err := s.storeLogsInternal(ctx, addresses, topics, logs, fromBlock, toBlock); err != nil {
+		return err
+	}
+
+	// Apply retention policy if enabled
+	if err := s.applyRetentionIfNeeded(ctx, latestFinalizedBlock); err != nil {
+		// Log warning but don't fail the store operation
+		s.log.Warnf("failed to apply retention policy: %v", err)
+	}
+
+	return nil
+}
+
+// storeLogsInternal handles the actual log storage
+func (s *LogStore) storeLogsInternal(
+	ctx context.Context,
+	addresses []ethcommon.Address,
+	topics [][]ethcommon.Hash,
+	logs []types.Log,
+	fromBlock, toBlock uint64,
+) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("failed to begin transaction: %w", err)
@@ -315,15 +349,28 @@ func (s *LogStore) HandleReorg(ctx context.Context, fromBlock uint64) error {
 
 // PruneLogsBeforeBlock removes logs before the given block number from the store.
 func (s *LogStore) PruneLogsBeforeBlock(ctx context.Context, beforeBlock uint64) error {
+	_, err := s.pruneLogsBeforeBlock(ctx, beforeBlock)
+	return err
+}
+
+func (s *LogStore) pruneLogsBeforeBlock(ctx context.Context, beforeBlock uint64) (uint64, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
-		return fmt.Errorf("failed to begin transaction: %w", err)
+		return 0, fmt.Errorf("failed to begin transaction: %w", err)
 	}
 	defer func() {
-		if err := tx.Rollback(); err != nil {
+		if err := tx.Rollback(); err != nil && !errors.Is(err, sql.ErrTxDone) {
 			s.log.Errorf("failed to rollback transaction: %v", err)
 		}
 	}()
+
+	var blockCount uint64
+	err = tx.QueryRowContext(ctx,
+		"SELECT COUNT(DISTINCT block_number) FROM event_logs WHERE block_number < ?",
+		beforeBlock).Scan(&blockCount)
+	if err != nil {
+		return 0, fmt.Errorf("failed to count blocks to prune: %w", err)
+	}
 
 	// Delete logs
 	const deleteLogsQuery = `
@@ -333,7 +380,7 @@ func (s *LogStore) PruneLogsBeforeBlock(ctx context.Context, beforeBlock uint64)
 
 	result, err := tx.Exec(deleteLogsQuery, beforeBlock)
 	if err != nil {
-		return fmt.Errorf("failed to delete logs: %w", err)
+		return 0, fmt.Errorf("failed to delete logs: %w", err)
 	}
 
 	rowsAffected, _ := result.RowsAffected()
@@ -346,7 +393,7 @@ func (s *LogStore) PruneLogsBeforeBlock(ctx context.Context, beforeBlock uint64)
 
 	_, err = tx.Exec(deleteCoverageQuery, beforeBlock)
 	if err != nil {
-		return fmt.Errorf("failed to delete coverage: %w", err)
+		return 0, fmt.Errorf("failed to delete coverage: %w", err)
 	}
 
 	// Delete topic coverage
@@ -357,16 +404,21 @@ func (s *LogStore) PruneLogsBeforeBlock(ctx context.Context, beforeBlock uint64)
 
 	_, err = tx.Exec(deleteTopicCoverageQuery, beforeBlock)
 	if err != nil {
-		return fmt.Errorf("failed to delete topic coverage: %w", err)
+		return 0, fmt.Errorf("failed to delete topic coverage: %w", err)
 	}
 
 	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("failed to commit transaction: %w", err)
+		return 0, fmt.Errorf("failed to commit transaction: %w", err)
+	}
+
+	// Vacuum to reclaim space
+	if err := db.Vacuum(s.db); err != nil {
+		s.log.Warnf("failed to vacuum database: %v", err)
 	}
 
 	s.log.Infof("Pruned %d logs before block %d", rowsAffected, beforeBlock)
 
-	return nil
+	return blockCount, nil
 }
 
 // Close closes the log store.
@@ -422,7 +474,7 @@ func (s *LogStore) dbLogToEthLog(dbLog *dbLog) types.Log {
 	}
 
 	// Convert topics
-	topics := []common.Hash{}
+	topics := []ethcommon.Hash{}
 	if dbLog.Topic0 != nil {
 		topics = append(topics, *dbLog.Topic0)
 	}
@@ -438,4 +490,174 @@ func (s *LogStore) dbLogToEthLog(dbLog *dbLog) types.Log {
 	log.Topics = topics
 
 	return log
+}
+
+// applyRetentionIfNeeded checks and applies retention policy if conditions are met
+func (s *LogStore) applyRetentionIfNeeded(
+	ctx context.Context,
+	finalizedBlock *types.Header,
+) error {
+	if !s.retentionPolicy.IsEnabled() {
+		return nil
+	}
+
+	var (
+		pruneBeforeBlock  uint64
+		finalizedBlockNum = finalizedBlock.Number.Uint64()
+	)
+
+	// Calculate prune threshold based on block age
+	if s.retentionPolicy.MaxBlocksFromFinalized > 0 &&
+		finalizedBlockNum > s.retentionPolicy.MaxBlocksFromFinalized {
+		pruneBeforeBlock = finalizedBlockNum - s.retentionPolicy.MaxBlocksFromFinalized
+	}
+
+	// Check database size and adjust if needed
+	if s.retentionPolicy.MaxDBSizeMB > 0 {
+		dbSize, err := s.getDatabaseSizeMB()
+		if err != nil {
+			return fmt.Errorf("failed to get database size: %w", err)
+		}
+
+		if dbSize >= s.retentionPolicy.MaxDBSizeMB {
+			s.log.Warnf("Database size (%d MB) exceeds limit (%d MB), calculating blocks to prune",
+				dbSize, s.retentionPolicy.MaxDBSizeMB)
+
+			// Calculate how many blocks to prune based on size
+			blockToPrune, err := s.calculateBlocksToFreeSpace(ctx, dbSize, s.retentionPolicy.MaxDBSizeMB)
+			if err != nil {
+				return fmt.Errorf("failed to calculate blocks to prune: %w", err)
+			}
+
+			// Use the more aggressive threshold
+			if blockToPrune > pruneBeforeBlock {
+				pruneBeforeBlock = blockToPrune
+			}
+		}
+	}
+
+	if pruneBeforeBlock == 0 {
+		return nil
+	}
+
+	// Prune logs before the threshold
+	blocksPruned, err := s.pruneLogsBeforeBlock(ctx, pruneBeforeBlock)
+	if err != nil {
+		return err
+	}
+
+	if blocksPruned > 0 {
+		s.log.Infof("Applied retention policy: pruned %d blocks (before block %d), finalized: %d",
+			blocksPruned, pruneBeforeBlock, finalizedBlock)
+	}
+
+	return nil
+}
+
+// getDatabaseSizeMB returns the current database size in megabytes
+func (s *LogStore) getDatabaseSizeMB() (uint64, error) {
+	sizeBytes, err := db.DBTotalSize(s.db, s.dbConfig.Path)
+	if err != nil {
+		return 0, err
+	}
+	return uint64(sizeBytes) / (1024 * 1024), nil
+}
+
+// calculateBlocksToFreeSpace estimates which block to prune to free the target space
+func (s *LogStore) calculateBlocksToFreeSpace(ctx context.Context, currentMB, maxMB uint64) (uint64, error) {
+	var oldestBlock, newestBlock uint64
+
+	err := s.db.QueryRowContext(ctx,
+		"SELECT MIN(from_block), MAX(to_block) FROM log_coverage").
+		Scan(&oldestBlock, &newestBlock)
+	if err != nil {
+		return 0, fmt.Errorf("failed to get block range: %w", err)
+	}
+
+	if oldestBlock == 0 && newestBlock == 0 {
+		return 0, nil
+	}
+
+	totalBlocks := newestBlock - oldestBlock + 1
+	targetBytes := common.MBToBytes(currentMB - maxMB)
+	totalBytes := common.MBToBytes(currentMB)
+
+	// Get counts for all tables
+	var eventLogCount, logCoverageCount, topicCoverageCount int64
+
+	err = s.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM event_logs").Scan(&eventLogCount)
+	if err != nil {
+		return 0, fmt.Errorf("failed to get event_logs count: %w", err)
+	}
+
+	err = s.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM log_coverage").Scan(&logCoverageCount)
+	if err != nil {
+		return 0, fmt.Errorf("failed to get log_coverage count: %w", err)
+	}
+
+	err = s.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM topic_coverage").Scan(&topicCoverageCount)
+	if err != nil {
+		return 0, fmt.Errorf("failed to get topic_coverage count: %w", err)
+	}
+
+	if eventLogCount == 0 {
+		return 0, nil
+	}
+
+	// Estimate average bytes per row (weighted by table)
+	// event_logs are typically larger (addresses, hashes, data)
+	// coverage tables are smaller (just addresses and block numbers)
+	// Use a rough weight: event_logs ~= 3x coverage row size
+	const eventLogWeight = 3
+	const coverageWeight = 1
+
+	totalWeightedRows := (eventLogCount * eventLogWeight) +
+		(logCoverageCount * coverageWeight) +
+		(topicCoverageCount * coverageWeight)
+
+	avgBytesPerWeightedRow := int64(totalBytes) / totalWeightedRows
+
+	// Estimate rows per block for each table
+	avgEventLogsPerBlock := float64(eventLogCount) / float64(totalBlocks)
+	avgLogCoveragePerBlock := float64(logCoverageCount) / float64(totalBlocks)
+	avgTopicCoveragePerBlock := float64(topicCoverageCount) / float64(totalBlocks)
+
+	// Calculate how many blocks we need to delete to free targetBytes
+	// For each block deleted, we free:
+	// - avgEventLogsPerBlock * eventLogWeight * avgBytesPerWeightedRow
+	// - avgLogCoveragePerBlock * coverageWeight * avgBytesPerWeightedRow
+	// - avgTopicCoveragePerBlock * coverageWeight * avgBytesPerWeightedRow
+
+	bytesFreedPerBlock := int64(
+		(avgEventLogsPerBlock * eventLogWeight * float64(avgBytesPerWeightedRow)) +
+			(avgLogCoveragePerBlock * coverageWeight * float64(avgBytesPerWeightedRow)) +
+			(avgTopicCoveragePerBlock * coverageWeight * float64(avgBytesPerWeightedRow)),
+	)
+
+	if bytesFreedPerBlock <= 0 {
+		bytesFreedPerBlock = 1 // avoid division by zero
+	}
+
+	blocksToDelete := uint64(int64(targetBytes) / bytesFreedPerBlock)
+
+	// Add safety margin (10%) since this is an estimate
+	blocksToDelete += blocksToDelete / 10
+
+	if blocksToDelete == 0 {
+		blocksToDelete = totalBlocks / 10 // fallback: delete 10% of blocks
+	}
+
+	// Ensure we don't try to delete more blocks than we have
+	if blocksToDelete > totalBlocks {
+		blocksToDelete = totalBlocks
+	}
+
+	pruneBeforeBlock := oldestBlock + blocksToDelete
+
+	s.log.Infof("Calculated prune threshold: block %d (deleting ~%d blocks to free ~%d MB)",
+		pruneBeforeBlock, blocksToDelete, currentMB-maxMB)
+	s.log.Debugf("Size calculation - event_logs: %d, log_coverage: %d, topic_coverage: %d, total blocks: %d",
+		eventLogCount, logCoverageCount, topicCoverageCount, totalBlocks)
+
+	return pruneBeforeBlock, nil
 }

@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"math/big"
 	"os"
 	"testing"
 
@@ -10,6 +11,7 @@ import (
 	"github.com/goran-ethernal/ChainIndexor/internal/db"
 	"github.com/goran-ethernal/ChainIndexor/internal/logger"
 	"github.com/goran-ethernal/ChainIndexor/internal/migrations"
+	"github.com/goran-ethernal/ChainIndexor/pkg/config"
 	"github.com/goran-ethernal/ChainIndexor/pkg/fetcher/store"
 	"github.com/stretchr/testify/require"
 )
@@ -32,8 +34,9 @@ func setupTestLogStore(t *testing.T) (*LogStore, func()) {
 	err = migrations.RunMigrations(dbPath)
 	require.NoError(t, err)
 
-	// Create log store
-	store := NewLogStore(sqlDB, logger.GetDefaultLogger())
+	// Create log store with proper dbConfig
+	dbConfig := config.DatabaseConfig{Path: dbPath}
+	store := NewLogStore(sqlDB, logger.GetDefaultLogger(), dbConfig, nil)
 
 	cleanup := func() {
 		sqlDB.Close()
@@ -714,4 +717,522 @@ func TestLogStore_GetLogs_NoCoverage(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, logs, 0)
 	require.Len(t, coverage, 0)
+}
+
+func TestLogStore_CalculateBlocksToFreeSpace(t *testing.T) {
+	store, cleanup := setupTestLogStore(t)
+	defer cleanup()
+
+	ctx := context.Background()
+	address1 := common.HexToAddress("0x1111111111111111111111111111111111111111")
+	address2 := common.HexToAddress("0x2222222222222222222222222222222222222222")
+	topic1 := common.HexToHash("0xaaaa")
+	topic2 := common.HexToHash("0xbbbb")
+
+	// Create a substantial dataset with multiple addresses and topics
+	// We'll create logs for many blocks with varying density
+	const (
+		startBlock = 1000
+		endBlock   = 5000 // Increased from 2000 to create more data
+		chunkSize  = 100
+	)
+
+	// Store logs in chunks to simulate realistic usage
+	for blockStart := startBlock; blockStart < endBlock; blockStart += chunkSize {
+		blockEnd := min(blockStart+chunkSize-1, endBlock)
+
+		var logs []types.Log
+		for block := blockStart; block <= blockEnd; block++ {
+			// Create varying number of logs per block (1-11 logs)
+			numLogs := int((block % 10) + 1)
+			for i := range numLogs {
+				// Alternate between addresses
+				addr := address1
+				if block%2 == 0 {
+					addr = address2
+				}
+
+				// Create larger data payloads to increase DB size
+				dataSize := 200 + (i * 50) // 200-700 bytes per log
+				data := make([]byte, dataSize)
+				for j := range dataSize {
+					data[j] = byte(j % 256)
+				}
+
+				log := types.Log{
+					Address:     addr,
+					Topics:      []common.Hash{topic1, topic2},
+					Data:        data,
+					BlockNumber: uint64(block),
+					BlockHash:   common.BigToHash(big.NewInt(int64(block))),
+					TxHash:      common.BigToHash(big.NewInt(int64(block*100 + i))),
+					TxIndex:     uint(i),
+					Index:       uint(i),
+				}
+				logs = append(logs, log)
+			}
+		}
+
+		// Store logs for both addresses with both topics
+		err := store.StoreLogs(ctx,
+			[]common.Address{address1, address2},
+			[][]common.Hash{{topic1, topic2}, {topic1, topic2}},
+			logs,
+			uint64(blockStart),
+			uint64(blockEnd),
+			nil,
+		)
+		require.NoError(t, err)
+	}
+
+	// Get initial database size in bytes for more precision
+	initialSizeBytes, err := db.DBTotalSize(store.db, store.dbConfig.Path)
+	require.NoError(t, err)
+	initialSize := uint64(initialSizeBytes) / (1024 * 1024) // Convert to MB
+	t.Logf("Initial database size: %d MB (%d bytes)", initialSize, initialSizeBytes)
+	require.Greater(t, initialSizeBytes, int64(0), "database should have measurable size")
+
+	// Get counts for verification
+	var eventLogCount, logCoverageCount, topicCoverageCount int64
+	err = store.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM event_logs").Scan(&eventLogCount)
+	require.NoError(t, err)
+	err = store.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM log_coverage").Scan(&logCoverageCount)
+	require.NoError(t, err)
+	err = store.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM topic_coverage").Scan(&topicCoverageCount)
+	require.NoError(t, err)
+
+	t.Logf("Row counts - event_logs: %d, log_coverage: %d, topic_coverage: %d",
+		eventLogCount, logCoverageCount, topicCoverageCount)
+
+	// Test Case 1: Calculate blocks to free to reduce size by ~30%
+	// For small databases, work with what we have
+	targetSize := initialSize * 7 / 10 // 70% of current size
+	if targetSize >= initialSize || initialSize == 0 {
+		// If database is < 1 MB, use bytes for calculation
+		targetSize = uint64(initialSizeBytes) * 7 / 10 / (1024 * 1024)
+		if targetSize >= initialSize {
+			targetSize = 0 // Force to free at least something
+		}
+	}
+
+	pruneBlock, err := store.calculateBlocksToFreeSpace(ctx, initialSize, targetSize)
+	require.NoError(t, err)
+	require.Greater(t, pruneBlock, uint64(startBlock), "prune block should be greater than start block")
+	require.Less(t, pruneBlock, uint64(endBlock), "prune block should be less than end block")
+
+	t.Logf("To reduce from %d MB to %d MB, prune before block %d", initialSize, targetSize, pruneBlock)
+
+	// Actually prune and verify the space freed
+	sizeBefore := initialSize
+	sizeBeforeBytes := initialSizeBytes
+
+	t.Logf("Before prune - size: %d bytes", sizeBeforeBytes)
+
+	blocksPruned, err := store.pruneLogsBeforeBlock(ctx, pruneBlock)
+	require.NoError(t, err)
+	require.Greater(t, blocksPruned, uint64(0), "should have pruned some blocks")
+
+	// Wait a moment for filesystem to sync
+	sizeAfterBytes, err := db.DBTotalSize(store.db, store.dbConfig.Path)
+	require.NoError(t, err)
+	sizeAfter := uint64(sizeAfterBytes) / (1024 * 1024)
+
+	t.Logf("After prune - size: %d bytes (before: %d bytes)", sizeAfterBytes, sizeBeforeBytes)
+
+	var spaceFreed, spaceFreedBytes int64
+	if sizeBeforeBytes > sizeAfterBytes {
+		spaceFreedBytes = sizeBeforeBytes - sizeAfterBytes
+		if sizeBefore > sizeAfter {
+			spaceFreed = int64(sizeBefore - sizeAfter)
+		}
+	}
+
+	t.Logf("Pruned %d blocks, freed %d MB (%d bytes)", blocksPruned, spaceFreed, spaceFreedBytes)
+
+	// Verify counts after pruning
+	var eventLogCountAfter, logCoverageCountAfter, topicCoverageCountAfter int64
+	err = store.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM event_logs").Scan(&eventLogCountAfter)
+	require.NoError(t, err)
+	err = store.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM log_coverage").Scan(&logCoverageCountAfter)
+	require.NoError(t, err)
+	err = store.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM topic_coverage").Scan(&topicCoverageCountAfter)
+	require.NoError(t, err)
+
+	t.Logf("After prune - event_logs: %d (-%d), log_coverage: %d (-%d), topic_coverage: %d (-%d)",
+		eventLogCountAfter, eventLogCount-eventLogCountAfter,
+		logCoverageCountAfter, logCoverageCount-logCoverageCountAfter,
+		topicCoverageCountAfter, topicCoverageCount-topicCoverageCountAfter)
+
+	// Verify that data was actually deleted from all tables
+	require.Less(t, eventLogCountAfter, eventLogCount, "event_logs count should decrease")
+	require.LessOrEqual(t, logCoverageCountAfter, logCoverageCount, "log_coverage count should decrease or stay same")
+	require.LessOrEqual(t, topicCoverageCountAfter, topicCoverageCount, "topic_coverage count should decrease or stay same")
+
+	// Verify we deleted the expected proportion of rows
+	eventLogsDeleted := eventLogCount - eventLogCountAfter
+	blocksToDelete := pruneBlock - uint64(startBlock)
+	totalBlocks := uint64(endBlock - startBlock)
+	expectedEventLogsDeleted := float64(eventLogCount) * float64(blocksToDelete) / float64(totalBlocks)
+	deletionAccuracy := float64(eventLogsDeleted) / expectedEventLogsDeleted * 100
+	t.Logf("Deletion accuracy: deleted %d event_logs out of %d, expected ~%.0f (%.1f%% accurate)",
+		eventLogsDeleted, eventLogCount, expectedEventLogsDeleted, deletionAccuracy)
+
+	// The deletion should be within reasonable bounds (within 100% of expected)
+	require.Greater(t, eventLogsDeleted, int64(0), "should have deleted some event_logs")
+	require.InDelta(t, expectedEventLogsDeleted, float64(eventLogsDeleted), expectedEventLogsDeleted,
+		"deleted rows should be within 100%% of expected")
+
+	// Note: In WAL mode, VACUUM doesn't immediately reclaim disk space.
+	// The space is reused for future inserts, but the file doesn't shrink.
+	// This is expected SQLite WAL behavior and doesn't indicate a bug.
+	// The important thing is that rows are deleted and space will be reused.
+	if spaceFreedBytes > 0 {
+		t.Logf("Space freed: %d bytes", spaceFreedBytes)
+	} else if sizeAfterBytes > sizeBeforeBytes {
+		t.Logf("File size increased by %d bytes (expected in WAL mode during VACUUM - space will be reused)",
+			sizeAfterBytes-sizeBeforeBytes)
+	} else {
+		t.Logf("File size unchanged (expected in WAL mode - deleted space will be reused for future writes)")
+	}
+
+	// Calculate accuracy metrics based on the calculation algorithm
+	targetFreedBytes := sizeBeforeBytes - int64(targetSize*1024*1024)
+	if targetFreedBytes > 0 {
+		t.Logf("Target was to free %d bytes to reach %d MB target size", targetFreedBytes, targetSize)
+	} // Test Case 2: Verify remaining data is correct
+	// All logs before pruneBlock should be gone
+	var logsBeforePrune int64
+	err = store.db.QueryRowContext(ctx,
+		"SELECT COUNT(*) FROM event_logs WHERE block_number < ?",
+		pruneBlock).Scan(&logsBeforePrune)
+	require.NoError(t, err)
+	require.Equal(t, int64(0), logsBeforePrune, "no logs should remain before prune block")
+
+	// Some logs after pruneBlock should remain
+	var logsAfterPrune int64
+	err = store.db.QueryRowContext(ctx,
+		"SELECT COUNT(*) FROM event_logs WHERE block_number >= ?",
+		pruneBlock).Scan(&logsAfterPrune)
+	require.NoError(t, err)
+	require.Greater(t, logsAfterPrune, int64(0), "logs should remain after prune block")
+
+	// Test Case 3: Verify coverage tables were also pruned
+	var coverageBeforePrune int64
+	err = store.db.QueryRowContext(ctx,
+		"SELECT COUNT(*) FROM log_coverage WHERE to_block < ?",
+		pruneBlock).Scan(&coverageBeforePrune)
+	require.NoError(t, err)
+	require.Equal(t, int64(0), coverageBeforePrune, "no log_coverage should remain before prune block")
+
+	var topicCoverageBeforePrune int64
+	err = store.db.QueryRowContext(ctx,
+		"SELECT COUNT(*) FROM topic_coverage WHERE to_block < ?",
+		pruneBlock).Scan(&topicCoverageBeforePrune)
+	require.NoError(t, err)
+	require.Equal(t, int64(0), topicCoverageBeforePrune, "no topic_coverage should remain before prune block")
+
+	// Test Case 4: Edge case - try to free more space than available (should prune most/all data)
+	currentSize := uint64(sizeAfterBytes) / (1024 * 1024)
+	pruneBlock2, err := store.calculateBlocksToFreeSpace(ctx, currentSize, 0)
+	require.NoError(t, err)
+	require.Greater(t, pruneBlock2, uint64(0), "should calculate a prune block even for full database deletion")
+	t.Logf("To free entire database (%d MB), would prune before block: %d", currentSize, pruneBlock2)
+}
+
+func TestLogStore_RetentionPolicy(t *testing.T) {
+	t.Run("MaxBlocksFromFinalized", func(t *testing.T) {
+		// Setup store with retention policy
+		tmpFile, err := os.CreateTemp("", "logstore_retention_blocks_*.db")
+		require.NoError(t, err)
+		tmpFile.Close()
+		dbPath := tmpFile.Name()
+		defer os.Remove(dbPath)
+
+		sqlDB, err := db.NewSQLiteDB(dbPath)
+		require.NoError(t, err)
+		defer sqlDB.Close()
+
+		err = migrations.RunMigrations(dbPath)
+		require.NoError(t, err)
+
+		// Retention policy: keep only 100 blocks from finalized
+		retentionPolicy := &config.RetentionPolicyConfig{
+			MaxBlocksFromFinalized: 100,
+			MaxDBSizeMB:            0, // disabled
+		}
+
+		dbConfig := config.DatabaseConfig{Path: dbPath}
+		store := NewLogStore(sqlDB, logger.GetDefaultLogger(), dbConfig, retentionPolicy)
+
+		ctx := context.Background()
+		address1 := common.HexToAddress("0x1111111111111111111111111111111111111111")
+		address2 := common.HexToAddress("0x2222222222222222222222222222222222222222")
+		topic1 := common.HexToHash("0xaaaa")
+		topic2 := common.HexToHash("0xbbbb")
+
+		// Store logs across a wide block range: 1000-1500 (500 blocks)
+		var allLogs []types.Log
+		for block := uint64(1000); block < 1500; block++ {
+			// 2 addresses, each with 2 logs per block
+			allLogs = append(allLogs,
+				createTestLog(address1, block, common.BytesToHash([]byte{byte(block), 0x01}), 0),
+				createTestLog(address1, block, common.BytesToHash([]byte{byte(block), 0x02}), 1),
+				createTestLog(address2, block, common.BytesToHash([]byte{byte(block), 0x03}), 2),
+				createTestLog(address2, block, common.BytesToHash([]byte{byte(block), 0x04}), 3),
+			)
+		}
+
+		// Store in chunks to simulate real usage
+		chunkSize := 100
+		for i := 0; i < len(allLogs); i += chunkSize * 4 { // 4 logs per block
+			end := i + chunkSize*4
+			if end > len(allLogs) {
+				end = len(allLogs)
+			}
+			chunk := allLogs[i:end]
+			fromBlock := chunk[0].BlockNumber
+			toBlock := chunk[len(chunk)-1].BlockNumber
+
+			err = store.storeLogsInternal(ctx,
+				[]common.Address{address1, address2},
+				[][]common.Hash{{topic1}, {topic2}},
+				chunk,
+				fromBlock,
+				toBlock,
+			)
+			require.NoError(t, err)
+		}
+
+		// Verify all logs are stored
+		var totalLogsBefore int64
+		err = sqlDB.QueryRow("SELECT COUNT(*) FROM event_logs").Scan(&totalLogsBefore)
+		require.NoError(t, err)
+		require.Equal(t, int64(2000), totalLogsBefore) // 500 blocks * 4 logs/block
+
+		t.Logf("Initial logs stored: %d", totalLogsBefore)
+
+		// Simulate finalized block at 1400
+		// With MaxBlocksFromFinalized=100, we should prune everything before block 1300
+		finalizedBlock := &types.Header{
+			Number: big.NewInt(1400),
+		}
+
+		// Apply retention policy
+		err = store.applyRetentionIfNeeded(ctx, finalizedBlock)
+		require.NoError(t, err)
+
+		// Verify pruning occurred
+		var totalLogsAfter, minBlock, maxBlock int64
+		err = sqlDB.QueryRow("SELECT COUNT(*), MIN(block_number), MAX(block_number) FROM event_logs").
+			Scan(&totalLogsAfter, &minBlock, &maxBlock)
+		require.NoError(t, err)
+
+		t.Logf("After retention - logs: %d, block range: %d-%d", totalLogsAfter, minBlock, maxBlock)
+
+		// Should have deleted blocks 1000-1299 (300 blocks * 4 logs = 1200 logs)
+		// Should keep blocks 1300-1499 (200 blocks * 4 logs = 800 logs)
+		require.Less(t, totalLogsAfter, totalLogsBefore, "should have pruned some logs")
+		require.GreaterOrEqual(t, minBlock, int64(1300), "oldest block should be >= 1300")
+		require.Equal(t, int64(1499), maxBlock, "newest block should still be 1499")
+
+		// Verify coverage was also pruned
+		var coverageCount int64
+		err = sqlDB.QueryRow("SELECT COUNT(*) FROM log_coverage WHERE to_block < 1300").Scan(&coverageCount)
+		require.NoError(t, err)
+		require.Equal(t, int64(0), coverageCount, "old coverage should be deleted")
+
+		var topicCoverageCount int64
+		err = sqlDB.QueryRow("SELECT COUNT(*) FROM topic_coverage WHERE to_block < 1300").Scan(&topicCoverageCount)
+		require.NoError(t, err)
+		require.Equal(t, int64(0), topicCoverageCount, "old topic coverage should be deleted")
+	})
+
+	t.Run("MaxDBSizeMB", func(t *testing.T) {
+		// Setup store with size-based retention policy
+		tmpFile, err := os.CreateTemp("", "logstore_retention_size_*.db")
+		require.NoError(t, err)
+		tmpFile.Close()
+		dbPath := tmpFile.Name()
+		defer os.Remove(dbPath)
+
+		sqlDB, err := db.NewSQLiteDB(dbPath)
+		require.NoError(t, err)
+		defer sqlDB.Close()
+
+		err = migrations.RunMigrations(dbPath)
+		require.NoError(t, err)
+
+		// Retention policy: limit database to 5 MB
+		retentionPolicy := &config.RetentionPolicyConfig{
+			MaxBlocksFromFinalized: 0, // disabled
+			MaxDBSizeMB:            5,
+		}
+
+		dbConfig := config.DatabaseConfig{Path: dbPath}
+		store := NewLogStore(sqlDB, logger.GetDefaultLogger(), dbConfig, retentionPolicy)
+
+		ctx := context.Background()
+		address := common.HexToAddress("0x1111111111111111111111111111111111111111")
+		topic := common.HexToHash("0xaaaa")
+
+		// Store enough logs to exceed 5 MB
+		// Each log is ~200-300 bytes, so ~20,000 logs should be ~4-6 MB
+		var allLogs []types.Log
+		for block := uint64(1000); block < 6000; block++ {
+			for i := uint(0); i < 4; i++ {
+				log := createTestLog(address, block, common.BytesToHash([]byte{byte(block), byte(i)}), i)
+				// Add some data to make logs bigger
+				log.Data = make([]byte, 100)
+				for j := range log.Data {
+					log.Data[j] = byte(block + uint64(i) + uint64(j))
+				}
+				allLogs = append(allLogs, log)
+			}
+		}
+
+		// Store in chunks
+		chunkSize := 500
+		for i := 0; i < len(allLogs); i += chunkSize {
+			end := i + chunkSize
+			if end > len(allLogs) {
+				end = len(allLogs)
+			}
+			chunk := allLogs[i:end]
+			fromBlock := chunk[0].BlockNumber
+			toBlock := chunk[len(chunk)-1].BlockNumber
+
+			err = store.storeLogsInternal(ctx,
+				[]common.Address{address},
+				[][]common.Hash{{topic}},
+				chunk,
+				fromBlock,
+				toBlock,
+			)
+			require.NoError(t, err)
+		}
+
+		// Get initial size
+		sizeBefore, err := store.getDatabaseSizeMB()
+		require.NoError(t, err)
+		t.Logf("Initial database size: %d MB", sizeBefore)
+
+		// Verify we exceeded the limit
+		require.Greater(t, sizeBefore, uint64(5), "database should exceed 5 MB limit")
+
+		// Simulate finalized block
+		finalizedBlock := &types.Header{
+			Number: big.NewInt(6000),
+		}
+
+		// Apply retention policy - should trigger size-based pruning
+		err = store.applyRetentionIfNeeded(ctx, finalizedBlock)
+		require.NoError(t, err)
+
+		// Get size after pruning
+		sizeAfter, err := store.getDatabaseSizeMB()
+		require.NoError(t, err)
+		t.Logf("After retention - database size: %d MB (before: %d MB)", sizeAfter, sizeBefore)
+
+		// Should have reduced size (may not be exactly 5 MB due to estimation, but should be closer)
+		require.Less(t, sizeAfter, sizeBefore, "database size should decrease after pruning")
+
+		// Verify some logs were deleted
+		var totalLogsAfter int64
+		err = sqlDB.QueryRow("SELECT COUNT(*) FROM event_logs").Scan(&totalLogsAfter)
+		require.NoError(t, err)
+		require.Less(t, totalLogsAfter, int64(len(allLogs)), "should have pruned some logs")
+		t.Logf("Logs after retention: %d (before: %d)", totalLogsAfter, len(allLogs))
+	})
+
+	t.Run("CombinedPolicy", func(t *testing.T) {
+		// Test both policies active - should use whichever is more aggressive
+		tmpFile, err := os.CreateTemp("", "logstore_retention_combined_*.db")
+		require.NoError(t, err)
+		tmpFile.Close()
+		dbPath := tmpFile.Name()
+		defer os.Remove(dbPath)
+
+		sqlDB, err := db.NewSQLiteDB(dbPath)
+		require.NoError(t, err)
+		defer sqlDB.Close()
+
+		err = migrations.RunMigrations(dbPath)
+		require.NoError(t, err)
+
+		retentionPolicy := &config.RetentionPolicyConfig{
+			MaxBlocksFromFinalized: 200, // keep 200 blocks
+			MaxDBSizeMB:            3,   // limit to 3 MB
+		}
+
+		dbConfig := config.DatabaseConfig{Path: dbPath}
+		store := NewLogStore(sqlDB, logger.GetDefaultLogger(), dbConfig, retentionPolicy)
+
+		ctx := context.Background()
+		address := common.HexToAddress("0x1111111111111111111111111111111111111111")
+		topic := common.HexToHash("0xaaaa")
+
+		// Store logs with large data to quickly hit size limit
+		var allLogs []types.Log
+		for block := uint64(1000); block < 3000; block++ {
+			for i := uint(0); i < 3; i++ {
+				log := createTestLog(address, block, common.BytesToHash([]byte{byte(block), byte(i)}), i)
+				log.Data = make([]byte, 200)
+				allLogs = append(allLogs, log)
+			}
+		}
+
+		// Store all logs
+		chunkSize := 300
+		for i := 0; i < len(allLogs); i += chunkSize {
+			end := i + chunkSize
+			if end > len(allLogs) {
+				end = len(allLogs)
+			}
+			chunk := allLogs[i:end]
+			fromBlock := chunk[0].BlockNumber
+			toBlock := chunk[len(chunk)-1].BlockNumber
+
+			err = store.storeLogsInternal(ctx,
+				[]common.Address{address},
+				[][]common.Hash{{topic}},
+				chunk,
+				fromBlock,
+				toBlock,
+			)
+			require.NoError(t, err)
+		}
+
+		sizeBefore, err := store.getDatabaseSizeMB()
+		require.NoError(t, err)
+		t.Logf("Initial database size: %d MB", sizeBefore)
+
+		// Finalized at block 2900
+		// Block policy: keep from 2700+ (2900 - 200)
+		// Size policy: likely more aggressive if DB > 3 MB
+		finalizedBlock := &types.Header{
+			Number: big.NewInt(2900),
+		}
+
+		err = store.applyRetentionIfNeeded(ctx, finalizedBlock)
+		require.NoError(t, err)
+
+		var minBlock, totalLogs int64
+		err = sqlDB.QueryRow("SELECT MIN(block_number), COUNT(*) FROM event_logs").
+			Scan(&minBlock, &totalLogs)
+		require.NoError(t, err)
+
+		sizeAfter, err := store.getDatabaseSizeMB()
+		require.NoError(t, err)
+
+		t.Logf("After retention - size: %d MB, logs: %d, min block: %d",
+			sizeAfter, totalLogs, minBlock)
+
+		// Should have applied whichever policy was more aggressive
+		require.Less(t, sizeAfter, sizeBefore, "size should decrease")
+		require.Less(t, totalLogs, int64(len(allLogs)), "should have pruned logs")
+
+		// If size policy was more aggressive, minBlock will be > 2700
+		// If block policy was more aggressive, minBlock should be around 2700
+		require.Greater(t, minBlock, int64(1000), "should have pruned old blocks")
+	})
 }

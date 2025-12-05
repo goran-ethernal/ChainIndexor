@@ -14,6 +14,12 @@ downloader:
   db:
     <<: *common_db
     path: "./data/downloader.sqlite"
+  # Optional: Log retention policy
+  retention_policy:
+    # Maximum database size in MB (0 = unlimited)
+    max_db_size_mb: 1024
+    # Maximum blocks to keep behind finalized block (0 = keep all)
+    max_blocks_from_finalized: 10000
 
 indexers:
   - name: "MyTokenIndexer"
