@@ -17,7 +17,7 @@ type LogFetcher interface {
 
 	// FetchRange fetches logs and headers for a specific block range.
 	// It verifies consistency using the ReorgDetector and returns an error if a reorg is detected.
-	FetchRange(ctx context.Context, finalizedBlock *types.Header, fromBlock, toBlock uint64) (*FetchResult, error)
+	FetchRange(ctx context.Context, fromBlock, toBlock uint64) (*FetchResult, error)
 
 	// FetchNext fetches the next chunk of logs based on the current mode.
 	// For backfill mode, it fetches from the given block up to chunk_size.
