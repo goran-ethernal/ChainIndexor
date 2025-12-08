@@ -86,10 +86,8 @@ func (lf *LogFetcher) GetMode() fetcher.FetchMode {
 
 // FetchRange fetches logs and headers for a specific block range.
 // It verifies consistency using the ReorgDetector and returns an error if a reorg is detected.
-func (lf *LogFetcher) FetchRange(ctx context.Context,
-	finalizedBlock *types.Header,
-	fromBlock, toBlock uint64) (*fetcher.FetchResult, error) {
-	return lf.fetchRange(ctx, fromBlock, toBlock, lf.cfg.Addresses, lf.cfg.Topics, finalizedBlock)
+func (lf *LogFetcher) FetchRange(ctx context.Context, fromBlock, toBlock uint64) (*fetcher.FetchResult, error) {
+	return lf.fetchRange(ctx, fromBlock, toBlock, lf.cfg.Addresses, lf.cfg.Topics)
 }
 
 func (lf *LogFetcher) fetchRange(
@@ -97,7 +95,6 @@ func (lf *LogFetcher) fetchRange(
 	fromBlock, toBlock uint64,
 	addresses []ethcommon.Address,
 	topics [][]ethcommon.Hash,
-	finalizedBlock *types.Header,
 ) (*fetcher.FetchResult, error) {
 	lf.log.Debugw("fetching range",
 		"from_block", fromBlock,
@@ -154,8 +151,7 @@ func (lf *LogFetcher) fetchRange(
 	// Store fetched logs
 	if err := lf.logStore.StoreLogs(ctx,
 		activeAddresses, activeTopics, logs,
-		fromBlock, toBlock,
-		finalizedBlock); err != nil {
+		fromBlock, toBlock); err != nil {
 		return nil, fmt.Errorf("failed to store logs: %w", err)
 	}
 
@@ -215,12 +211,6 @@ func (lf *LogFetcher) fetchBackfill(
 	lastIndexedBlock uint64,
 	downloaderStartBlock uint64,
 ) (*fetcher.FetchResult, error) {
-	// Get the current finalized block
-	finalizedBlock, err := lf.getFinalizedBlock(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get finalized block: %w", err)
-	}
-
 	// check first if there are any unsynced logs
 	// its the logs for indexers that just joined or want to backfill missed logs
 	nonSyncedLogs, err := lf.logStore.GetUnsyncedTopics(ctx, lf.cfg.Addresses, lf.cfg.Topics, lastIndexedBlock)
@@ -241,8 +231,13 @@ func (lf *LogFetcher) fetchBackfill(
 			toBlock,
 			unsyncedAddresses,
 			unsyncedTopics,
-			finalizedBlock,
 		)
+	}
+
+	// Get the current finalized block
+	finalizedBlock, err := lf.getFinalizedBlock(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get finalized block: %w", err)
 	}
 
 	finalizedBlockNum := finalizedBlock.Number.Uint64()
@@ -256,7 +251,7 @@ func (lf *LogFetcher) fetchBackfill(
 		return lf.fetchLive(ctx, lastIndexedBlock)
 	}
 
-	return lf.FetchRange(ctx, finalizedBlock, fromBlock, toBlock)
+	return lf.FetchRange(ctx, fromBlock, toBlock)
 }
 
 // fetchLive tails new blocks as they become finalized.
@@ -293,7 +288,7 @@ func (lf *LogFetcher) fetchLive(ctx context.Context, lastIndexedBlock uint64) (*
 		toBlock = fromBlock + lf.cfg.ChunkSize - 1
 	}
 
-	return lf.FetchRange(ctx, finalizedBlock, fromBlock, toBlock)
+	return lf.FetchRange(ctx, fromBlock, toBlock)
 }
 
 // getFinalizedBlock gets the block number considered finalized based on config.

@@ -102,6 +102,24 @@ func (s *LogStore) GetUnsyncedTopics(
 	for i, address := range addresses {
 		addressTopics := topics[i]
 
+		// Get the oldest block still in database for this address-topic combination
+		// This accounts for retention policy pruning - we don't want to re-sync pruned data
+		var oldestBlock sql.NullInt64
+		err := s.db.QueryRowContext(ctx,
+			"SELECT MIN(from_block) FROM topic_coverage WHERE address = ?",
+			address.Hex()).Scan(&oldestBlock)
+		if err != nil && !errors.Is(err, sql.ErrNoRows) {
+			return nil, fmt.Errorf("failed to get oldest block for address: %w", err)
+		}
+
+		// Determine the starting block for coverage check
+		// If we have coverage data, start from oldest retained block
+		// If no coverage exists, start from 0 (need full sync)
+		startBlock := uint64(0)
+		if oldestBlock.Valid && oldestBlock.Int64 > 0 {
+			startBlock = uint64(oldestBlock.Int64)
+		}
+
 		for _, topic := range addressTopics {
 			// Query topic coverage for this address-topic combination
 			const topicCoverageQuery = `
@@ -111,14 +129,15 @@ func (s *LogStore) GetUnsyncedTopics(
 			`
 
 			var dbCoverages []*dbTopicCoverage
-			err := meddler.QueryAll(s.db, &dbCoverages, topicCoverageQuery, address.Hex(), topic.Hex(), 0, upToBlock)
+			err := meddler.QueryAll(s.db, &dbCoverages, topicCoverageQuery,
+				address.Hex(), topic.Hex(), startBlock, upToBlock)
 			if err != nil {
 				return nil, fmt.Errorf("failed to query topic coverage: %w", err)
 			}
 
-			// Check if there's a gap in coverage from 0 to upToBlock
-			// We need continuous coverage from 0 to upToBlock
-			if !s.hasCompleteCoverage(dbCoverages, 0, upToBlock) {
+			// Check if there's a gap in coverage from startBlock to upToBlock
+			// We need continuous coverage from startBlock (accounting for pruning) to upToBlock
+			if !s.hasCompleteCoverage(dbCoverages, startBlock, upToBlock) {
 				var coverage store.CoverageRange
 				if len(dbCoverages) > 0 {
 					coverage = store.CoverageRange{
@@ -172,7 +191,6 @@ func (s *LogStore) StoreLogs(
 	topics [][]ethcommon.Hash,
 	logs []types.Log,
 	fromBlock, toBlock uint64,
-	latestFinalizedBlock *types.Header,
 ) error {
 	if len(addresses) != len(topics) {
 		return fmt.Errorf("addresses and topics length mismatch: %d vs %d", len(addresses), len(topics))
@@ -188,7 +206,7 @@ func (s *LogStore) StoreLogs(
 	}
 
 	// Apply retention policy if enabled
-	if err := s.applyRetentionIfNeeded(ctx, latestFinalizedBlock); err != nil {
+	if err := s.applyRetentionIfNeeded(ctx); err != nil {
 		// Log warning but don't fail the store operation
 		s.log.Warnf("failed to apply retention policy: %v", err)
 	}
@@ -493,23 +511,28 @@ func (s *LogStore) dbLogToEthLog(dbLog *dbLog) types.Log {
 }
 
 // applyRetentionIfNeeded checks and applies retention policy if conditions are met
-func (s *LogStore) applyRetentionIfNeeded(
-	ctx context.Context,
-	finalizedBlock *types.Header,
-) error {
+func (s *LogStore) applyRetentionIfNeeded(ctx context.Context) error {
 	if !s.retentionPolicy.IsEnabled() {
 		return nil
 	}
 
-	var (
-		pruneBeforeBlock  uint64
-		finalizedBlockNum = finalizedBlock.Number.Uint64()
-	)
+	var pruneBeforeBlock uint64
 
 	// Calculate prune threshold based on block age
-	if s.retentionPolicy.MaxBlocksFromFinalized > 0 &&
-		finalizedBlockNum > s.retentionPolicy.MaxBlocksFromFinalized {
-		pruneBeforeBlock = finalizedBlockNum - s.retentionPolicy.MaxBlocksFromFinalized
+	if s.retentionPolicy.MaxBlocks > 0 {
+		// select min and max block numbers in the database
+		var oldestBlock, newestBlock uint64
+
+		err := s.db.QueryRowContext(ctx,
+			"SELECT MIN(from_block), MAX(to_block) FROM log_coverage").
+			Scan(&oldestBlock, &newestBlock)
+		if err != nil && !errors.Is(err, sql.ErrNoRows) {
+			return fmt.Errorf("failed to get block range: %w", err)
+		}
+
+		if newestBlock > oldestBlock && newestBlock-oldestBlock > s.retentionPolicy.MaxBlocks {
+			pruneBeforeBlock = newestBlock - s.retentionPolicy.MaxBlocks
+		}
 	}
 
 	// Check database size and adjust if needed
@@ -547,8 +570,8 @@ func (s *LogStore) applyRetentionIfNeeded(
 	}
 
 	if blocksPruned > 0 {
-		s.log.Infof("Applied retention policy: pruned %d blocks (before block %d), finalized: %d",
-			blocksPruned, pruneBeforeBlock, finalizedBlock)
+		s.log.Infof("Applied retention policy: pruned %d blocks (before block %d)",
+			blocksPruned, pruneBeforeBlock)
 	}
 
 	return nil

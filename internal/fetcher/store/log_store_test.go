@@ -75,7 +75,7 @@ func TestLogStore_StoreLogs(t *testing.T) {
 	}
 
 	topics := []common.Hash{common.HexToHash("0x1234")} // Extract topic0 from test logs
-	err := store.StoreLogs(ctx, []common.Address{address}, [][]common.Hash{topics}, logs, 100, 102, nil)
+	err := store.StoreLogs(ctx, []common.Address{address}, [][]common.Hash{topics}, logs, 100, 102)
 	require.NoError(t, err)
 
 	// Retrieve logs
@@ -107,7 +107,7 @@ func TestLogStore_GetLogs_PartialCoverage(t *testing.T) {
 		createTestLog(address, 102, common.HexToHash("0xccc"), 0),
 	}
 	topics := []common.Hash{common.HexToHash("0x1234")}
-	err := store.StoreLogs(ctx, []common.Address{address}, [][]common.Hash{topics}, logs1, 100, 102, nil)
+	err := store.StoreLogs(ctx, []common.Address{address}, [][]common.Hash{topics}, logs1, 100, 102)
 	require.NoError(t, err)
 
 	// Store logs for blocks 105-107 (gap between 102 and 105)
@@ -116,7 +116,7 @@ func TestLogStore_GetLogs_PartialCoverage(t *testing.T) {
 		createTestLog(address, 106, common.HexToHash("0xeee"), 0),
 		createTestLog(address, 107, common.HexToHash("0xfff"), 0),
 	}
-	err = store.StoreLogs(ctx, []common.Address{address}, [][]common.Hash{topics}, logs2, 105, 107, nil)
+	err = store.StoreLogs(ctx, []common.Address{address}, [][]common.Hash{topics}, logs2, 105, 107)
 	require.NoError(t, err)
 
 	// Query range 100-107
@@ -149,7 +149,7 @@ func TestLogStore_HandleReorg(t *testing.T) {
 		createTestLog(address, 105, common.HexToHash("0xfff"), 0),
 	}
 	topics := []common.Hash{common.HexToHash("0x1234")}
-	err := store.StoreLogs(ctx, []common.Address{address}, [][]common.Hash{topics}, logs, 100, 105, nil)
+	err := store.StoreLogs(ctx, []common.Address{address}, [][]common.Hash{topics}, logs, 100, 105)
 	require.NoError(t, err)
 
 	// Handle reorg from block 103
@@ -187,7 +187,7 @@ func TestLogStore_PruneLogsBeforeBlock(t *testing.T) {
 		createTestLog(address, 105, common.HexToHash("0xfff"), 0),
 	}
 	topics := []common.Hash{common.HexToHash("0x1234")}
-	err := store.StoreLogs(ctx, []common.Address{address}, [][]common.Hash{topics}, logs, 100, 105, nil)
+	err := store.StoreLogs(ctx, []common.Address{address}, [][]common.Hash{topics}, logs, 100, 105)
 	require.NoError(t, err)
 
 	// Prune logs before block 103
@@ -217,7 +217,7 @@ func TestLogStore_MultipleAddresses(t *testing.T) {
 		createTestLog(address1, 101, common.HexToHash("0xbbb"), 0),
 	}
 	topics := []common.Hash{common.HexToHash("0x1234")}
-	err := store.StoreLogs(ctx, []common.Address{address1}, [][]common.Hash{topics}, logs1, 100, 101, nil)
+	err := store.StoreLogs(ctx, []common.Address{address1}, [][]common.Hash{topics}, logs1, 100, 101)
 	require.NoError(t, err)
 
 	// Store logs for address2
@@ -225,7 +225,7 @@ func TestLogStore_MultipleAddresses(t *testing.T) {
 		createTestLog(address2, 100, common.HexToHash("0xccc"), 0),
 		createTestLog(address2, 101, common.HexToHash("0xddd"), 0),
 	}
-	err = store.StoreLogs(ctx, []common.Address{address2}, [][]common.Hash{topics}, logs2, 100, 101, nil)
+	err = store.StoreLogs(ctx, []common.Address{address2}, [][]common.Hash{topics}, logs2, 100, 101)
 	require.NoError(t, err)
 
 	// Retrieve logs for address1
@@ -256,14 +256,14 @@ func TestLogStore_GetUnsyncedTopics(t *testing.T) {
 	logs1 := []types.Log{
 		createTestLog(address1, 50, common.HexToHash("0xaaa"), 0),
 	}
-	err := store.StoreLogs(ctx, []common.Address{address1}, [][]common.Hash{{topic1}}, logs1, 0, 100, nil)
+	err := store.StoreLogs(ctx, []common.Address{address1}, [][]common.Hash{{topic1}}, logs1, 0, 100)
 	require.NoError(t, err)
 
 	// Store logs for address1, topic2, blocks 0-50 (partial coverage)
 	logs2 := []types.Log{
 		createTestLog(address1, 25, common.HexToHash("0xbbb"), 0),
 	}
-	err = store.StoreLogs(ctx, []common.Address{address1}, [][]common.Hash{{topic2}}, logs2, 0, 50, nil)
+	err = store.StoreLogs(ctx, []common.Address{address1}, [][]common.Hash{{topic2}}, logs2, 0, 50)
 	require.NoError(t, err)
 
 	// Check unsynced topics for address1 up to block 100
@@ -298,10 +298,10 @@ func TestLogStore_GetUnsyncedTopics_CompleteCoverage(t *testing.T) {
 	topic := common.HexToHash("0x1234")
 
 	// Store coverage in multiple ranges that together cover 0-100
-	err := store.StoreLogs(ctx, []common.Address{address}, [][]common.Hash{{topic}}, []types.Log{}, 0, 50, nil)
+	err := store.StoreLogs(ctx, []common.Address{address}, [][]common.Hash{{topic}}, []types.Log{}, 0, 50)
 	require.NoError(t, err)
 
-	err = store.StoreLogs(ctx, []common.Address{address}, [][]common.Hash{{topic}}, []types.Log{}, 51, 100, nil)
+	err = store.StoreLogs(ctx, []common.Address{address}, [][]common.Hash{{topic}}, []types.Log{}, 51, 100)
 	require.NoError(t, err)
 
 	// Check unsynced topics - should be empty as we have complete coverage
@@ -327,7 +327,7 @@ func TestLogStore_HandleReorg_ClearsTopicCoverage(t *testing.T) {
 	logs := []types.Log{
 		createTestLog(address, 50, common.HexToHash("0xaaa"), 0),
 	}
-	err := store.StoreLogs(ctx, []common.Address{address}, [][]common.Hash{{topic}}, logs, 0, 100, nil)
+	err := store.StoreLogs(ctx, []common.Address{address}, [][]common.Hash{{topic}}, logs, 0, 100)
 	require.NoError(t, err)
 
 	// Verify topic is synced
@@ -360,13 +360,13 @@ func TestLogStore_HandleReorg_TruncatesSpanningRanges(t *testing.T) {
 	logs1 := []types.Log{
 		createTestLog(address, 50, common.HexToHash("0xaaa"), 0),
 	}
-	err := store.StoreLogs(ctx, []common.Address{address}, [][]common.Hash{{topic}}, logs1, 0, 100, nil)
+	err := store.StoreLogs(ctx, []common.Address{address}, [][]common.Hash{{topic}}, logs1, 0, 100)
 	require.NoError(t, err)
 
 	logs2 := []types.Log{
 		createTestLog(address, 150, common.HexToHash("0xbbb"), 0),
 	}
-	err = store.StoreLogs(ctx, []common.Address{address}, [][]common.Hash{{topic}}, logs2, 101, 200, nil)
+	err = store.StoreLogs(ctx, []common.Address{address}, [][]common.Hash{{topic}}, logs2, 101, 200)
 	require.NoError(t, err)
 
 	// Verify we have two coverage ranges
@@ -405,7 +405,7 @@ func TestLogStore_HandleReorg_TruncatesSpanningRanges(t *testing.T) {
 	logs3 := []types.Log{
 		createTestLog(address, 175, common.HexToHash("0xccc"), 0),
 	}
-	err = store.StoreLogs(ctx, []common.Address{address}, [][]common.Hash{{topic}}, logs3, 150, 200, nil)
+	err = store.StoreLogs(ctx, []common.Address{address}, [][]common.Hash{{topic}}, logs3, 150, 200)
 	require.NoError(t, err)
 
 	// Now we should have three coverage ranges: 0-100, 101-149, 150-200
@@ -619,7 +619,7 @@ func TestLogStore_TopicConversion(t *testing.T) {
 				topicFilter = []common.Hash{tt.topics[0]}
 			}
 
-			err := store.StoreLogs(ctx, []common.Address{address}, [][]common.Hash{topicFilter}, []types.Log{log}, log.BlockNumber, log.BlockNumber, nil)
+			err := store.StoreLogs(ctx, []common.Address{address}, [][]common.Hash{topicFilter}, []types.Log{log}, log.BlockNumber, log.BlockNumber)
 			require.NoError(t, err)
 
 			// Retrieve and verify topics are preserved correctly
@@ -640,7 +640,7 @@ func TestLogStore_StoreLogs_EmptyLogs(t *testing.T) {
 	topic := common.HexToHash("0x1234")
 
 	// Store empty logs (important for coverage tracking)
-	err := store.StoreLogs(ctx, []common.Address{address}, [][]common.Hash{{topic}}, []types.Log{}, 100, 105, nil)
+	err := store.StoreLogs(ctx, []common.Address{address}, [][]common.Hash{{topic}}, []types.Log{}, 100, 105)
 	require.NoError(t, err)
 
 	// Coverage should still be recorded
@@ -665,11 +665,11 @@ func TestLogStore_StoreLogs_DuplicateLogs(t *testing.T) {
 	}
 
 	// Store logs first time
-	err := store.StoreLogs(ctx, []common.Address{address}, [][]common.Hash{{topic}}, logs, 100, 101, nil)
+	err := store.StoreLogs(ctx, []common.Address{address}, [][]common.Hash{{topic}}, logs, 100, 101)
 	require.NoError(t, err)
 
 	// Store same logs again (should be ignored due to UNIQUE constraint)
-	err = store.StoreLogs(ctx, []common.Address{address}, [][]common.Hash{{topic}}, logs, 100, 101, nil)
+	err = store.StoreLogs(ctx, []common.Address{address}, [][]common.Hash{{topic}}, logs, 100, 101)
 	require.NoError(t, err)
 
 	// Should still only have 2 logs
@@ -692,7 +692,7 @@ func TestLogStore_MultipleTopics(t *testing.T) {
 		createTestLog(address, 100, common.HexToHash("0xaaa"), 0),
 	}
 
-	err := store.StoreLogs(ctx, []common.Address{address}, [][]common.Hash{{topic1, topic2}}, logs, 0, 100, nil)
+	err := store.StoreLogs(ctx, []common.Address{address}, [][]common.Hash{{topic1, topic2}}, logs, 0, 100)
 	require.NoError(t, err)
 
 	// Check that both topics are tracked in coverage
@@ -782,7 +782,6 @@ func TestLogStore_CalculateBlocksToFreeSpace(t *testing.T) {
 			logs,
 			uint64(blockStart),
 			uint64(blockEnd),
-			nil,
 		)
 		require.NoError(t, err)
 	}
@@ -961,8 +960,8 @@ func TestLogStore_RetentionPolicy(t *testing.T) {
 
 		// Retention policy: keep only 100 blocks from finalized
 		retentionPolicy := &config.RetentionPolicyConfig{
-			MaxBlocksFromFinalized: 100,
-			MaxDBSizeMB:            0, // disabled
+			MaxBlocks:   100,
+			MaxDBSizeMB: 0, // disabled
 		}
 
 		store := NewLogStore(sqlDB, logger.GetDefaultLogger(), dbConfig, retentionPolicy)
@@ -1011,14 +1010,8 @@ func TestLogStore_RetentionPolicy(t *testing.T) {
 
 		t.Logf("Initial logs stored: %d", totalLogsBefore)
 
-		// Simulate finalized block at 1400
-		// With MaxBlocksFromFinalized=100, we should prune everything before block 1300
-		finalizedBlock := &types.Header{
-			Number: big.NewInt(1400),
-		}
-
 		// Apply retention policy
-		err = store.applyRetentionIfNeeded(ctx, finalizedBlock)
+		err = store.applyRetentionIfNeeded(ctx)
 		require.NoError(t, err)
 
 		// Verify pruning occurred
@@ -1066,8 +1059,8 @@ func TestLogStore_RetentionPolicy(t *testing.T) {
 
 		// Retention policy: limit database to 5 MB
 		retentionPolicy := &config.RetentionPolicyConfig{
-			MaxBlocksFromFinalized: 0, // disabled
-			MaxDBSizeMB:            5,
+			MaxBlocks:   0, // disabled
+			MaxDBSizeMB: 5,
 		}
 
 		store := NewLogStore(sqlDB, logger.GetDefaultLogger(), dbConfig, retentionPolicy)
@@ -1117,13 +1110,8 @@ func TestLogStore_RetentionPolicy(t *testing.T) {
 		// Verify we exceeded the limit
 		require.Greater(t, sizeBefore, uint64(5), "database should exceed 5 MB limit")
 
-		// Simulate finalized block
-		finalizedBlock := &types.Header{
-			Number: big.NewInt(6000),
-		}
-
 		// Apply retention policy - should trigger size-based pruning
-		err = store.applyRetentionIfNeeded(ctx, finalizedBlock)
+		err = store.applyRetentionIfNeeded(ctx)
 		require.NoError(t, err)
 
 		// Get size after pruning
@@ -1161,8 +1149,8 @@ func TestLogStore_RetentionPolicy(t *testing.T) {
 		require.NoError(t, err)
 
 		retentionPolicy := &config.RetentionPolicyConfig{
-			MaxBlocksFromFinalized: 200, // keep 200 blocks
-			MaxDBSizeMB:            3,   // limit to 3 MB
+			MaxBlocks:   200, // keep 200 blocks
+			MaxDBSizeMB: 3,   // limit to 3 MB
 		}
 
 		store := NewLogStore(sqlDB, logger.GetDefaultLogger(), dbConfig, retentionPolicy)
@@ -1203,14 +1191,7 @@ func TestLogStore_RetentionPolicy(t *testing.T) {
 		require.NoError(t, err)
 		t.Logf("Initial database size: %d MB", sizeBefore)
 
-		// Finalized at block 2900
-		// Block policy: keep from 2700+ (2900 - 200)
-		// Size policy: likely more aggressive if DB > 3 MB
-		finalizedBlock := &types.Header{
-			Number: big.NewInt(2900),
-		}
-
-		err = store.applyRetentionIfNeeded(ctx, finalizedBlock)
+		err = store.applyRetentionIfNeeded(ctx)
 		require.NoError(t, err)
 
 		var minBlock, totalLogs int64

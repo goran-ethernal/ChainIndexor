@@ -30,7 +30,6 @@ type LogStore interface {
 		topics [][]common.Hash,
 		logs []types.Log,
 		fromBlock, toBlock uint64,
-		lastFinalizedBlock *types.Header,
 	) error
 
 	// HandleReorg deletes logs starting from the given block number.

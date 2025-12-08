@@ -104,13 +104,13 @@ type RetentionPolicyConfig struct {
 	// MaxDBSizeMB is the maximum database size in megabytes (0 = unlimited)
 	MaxDBSizeMB uint64 `yaml:"max_db_size_mb"`
 
-	// MaxBlocksFromFinalized is blocks to keep behind finalized (0 = keep all)
-	MaxBlocksFromFinalized uint64 `yaml:"max_blocks_from_finalized"`
+	// MaxBlocks is the maximum number of blocks to retain (0 = unlimited)
+	MaxBlocks uint64 `yaml:"max_blocks"`
 }
 
 // IsEnabled returns true if retention policy should be applied
 func (r *RetentionPolicyConfig) IsEnabled() bool {
-	return r != nil && (r.MaxDBSizeMB > 0 || r.MaxBlocksFromFinalized > 0)
+	return r != nil && (r.MaxDBSizeMB > 0 || r.MaxBlocks > 0)
 }
 
 // IndexerConfig represents the configuration for a single indexer.

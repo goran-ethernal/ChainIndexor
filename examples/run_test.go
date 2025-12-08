@@ -18,6 +18,9 @@ import (
 func TestRun(t *testing.T) {
 	t.Skip("Exploratory example test - uncomment this and change the example config to run")
 
+	// Uncomment to clean up data directory before every test run
+	// require.NoError(t, os.RemoveAll("./data"))
+
 	configPath := "../config.example.yaml"
 
 	cfg, err := config.LoadFromFile(configPath)
@@ -81,7 +84,7 @@ func TestRun(t *testing.T) {
 		if err != nil {
 			t.Fatalf("downloader failed: %v", err)
 		}
-	case <-time.After(20 * time.Minute):
+	case <-time.After(1 * time.Hour):
 		cancel()
 	}
 }
