@@ -14,7 +14,10 @@ import (
 	"github.com/goran-ethernal/ChainIndexor/pkg/config"
 	"github.com/goran-ethernal/ChainIndexor/pkg/fetcher/store"
 	"github.com/russross/meddler"
+	"golang.org/x/sync/errgroup"
 )
+
+const maxConcurrency = 10
 
 var _ store.LogStore = (*LogStore)(nil)
 
@@ -232,45 +235,62 @@ func (s *LogStore) storeLogsInternal(
 		}
 	}()
 
-	// Insert logs
-	for _, log := range logs {
-		dbLog := s.ethLogToDbLog(&log)
+	g, errCtx := errgroup.WithContext(ctx)
+	g.SetLimit(maxConcurrency)
 
-		err := meddler.Insert(tx, "event_logs", dbLog)
-		if err != nil {
-			// If insert fails due to unique constraint, ignore (log already exists)
-			// This can happen when re-indexing the same range
-			continue
+	g.Go(func() error {
+		// Insert logs
+		for _, log := range logs {
+			dbLog := s.ethLogToDbLog(&log)
+
+			err := meddler.Insert(tx, "event_logs", dbLog)
+			if err != nil {
+				// If insert fails due to unique constraint, ignore (log already exists)
+				// This can happen when re-indexing the same range
+				continue
+			}
 		}
-	}
+
+		return nil
+	})
 
 	for i, address := range addresses {
 		topics := topics[i]
-		// Record coverage
-		const coverageInsertQuery = `
+
+		g.Go(func() error {
+			// Record coverage
+			const coverageInsertQuery = `
 			INSERT INTO log_coverage (address, from_block, to_block)
 			VALUES (?, ?, ?)
 			ON CONFLICT(address, from_block, to_block) DO NOTHING
-		`
+			`
 
-		_, err = tx.Exec(coverageInsertQuery, address.Hex(), fromBlock, toBlock)
-		if err != nil {
-			return fmt.Errorf("failed to insert coverage: %w", err)
-		}
+			_, err = tx.ExecContext(errCtx, coverageInsertQuery, address.Hex(), fromBlock, toBlock)
+			if err != nil {
+				return fmt.Errorf("failed to insert coverage: %w", err)
+			}
 
-		// Record topic-specific coverage for each topic queried
-		const topicCoverageInsertQuery = `
+			// Record topic-specific coverage for each topic queried
+			const topicCoverageInsertQuery = `
 			INSERT INTO topic_coverage (address, topic0, from_block, to_block)
 			VALUES (?, ?, ?, ?)
 			ON CONFLICT(address, topic0, from_block, to_block) DO NOTHING
-		`
+			`
 
-		for _, topic := range topics {
-			_, err = tx.Exec(topicCoverageInsertQuery, address.Hex(), topic.Hex(), fromBlock, toBlock)
-			if err != nil {
-				return fmt.Errorf("failed to insert topic coverage: %w", err)
+			for _, topic := range topics {
+				_, err = tx.ExecContext(errCtx, topicCoverageInsertQuery,
+					address.Hex(), topic.Hex(), fromBlock, toBlock)
+				if err != nil {
+					return fmt.Errorf("failed to insert topic coverage: %w", err)
+				}
 			}
-		}
+
+			return nil
+		})
+	}
+
+	if err := g.Wait(); err != nil {
+		return err
 	}
 
 	if err := tx.Commit(); err != nil {
@@ -301,7 +321,7 @@ func (s *LogStore) HandleReorg(ctx context.Context, fromBlock uint64) error {
 		WHERE block_number >= ?
 	`
 
-	result, err := tx.Exec(deleteLogsQuery, fromBlock)
+	result, err := tx.ExecContext(ctx, deleteLogsQuery, fromBlock)
 	if err != nil {
 		return fmt.Errorf("failed to delete logs: %w", err)
 	}
@@ -317,7 +337,7 @@ func (s *LogStore) HandleReorg(ctx context.Context, fromBlock uint64) error {
 		WHERE from_block < ? AND to_block >= ?
 	`
 
-	_, err = tx.Exec(updateCoverageQuery, fromBlock-1, fromBlock, fromBlock)
+	_, err = tx.ExecContext(ctx, updateCoverageQuery, fromBlock-1, fromBlock, fromBlock)
 	if err != nil {
 		return fmt.Errorf("failed to update coverage: %w", err)
 	}
@@ -328,7 +348,7 @@ func (s *LogStore) HandleReorg(ctx context.Context, fromBlock uint64) error {
 		WHERE from_block >= ?
 	`
 
-	_, err = tx.Exec(deleteCoverageQuery, fromBlock)
+	_, err = tx.ExecContext(ctx, deleteCoverageQuery, fromBlock)
 	if err != nil {
 		return fmt.Errorf("failed to delete coverage: %w", err)
 	}
@@ -396,7 +416,7 @@ func (s *LogStore) pruneLogsBeforeBlock(ctx context.Context, beforeBlock uint64)
 		WHERE block_number < ?
 	`
 
-	result, err := tx.Exec(deleteLogsQuery, beforeBlock)
+	result, err := tx.ExecContext(ctx, deleteLogsQuery, beforeBlock)
 	if err != nil {
 		return 0, fmt.Errorf("failed to delete logs: %w", err)
 	}
@@ -409,7 +429,7 @@ func (s *LogStore) pruneLogsBeforeBlock(ctx context.Context, beforeBlock uint64)
 		WHERE to_block < ?
 	`
 
-	_, err = tx.Exec(deleteCoverageQuery, beforeBlock)
+	_, err = tx.ExecContext(ctx, deleteCoverageQuery, beforeBlock)
 	if err != nil {
 		return 0, fmt.Errorf("failed to delete coverage: %w", err)
 	}
@@ -420,7 +440,7 @@ func (s *LogStore) pruneLogsBeforeBlock(ctx context.Context, beforeBlock uint64)
 		WHERE to_block < ?
 	`
 
-	_, err = tx.Exec(deleteTopicCoverageQuery, beforeBlock)
+	_, err = tx.ExecContext(ctx, deleteTopicCoverageQuery, beforeBlock)
 	if err != nil {
 		return 0, fmt.Errorf("failed to delete topic coverage: %w", err)
 	}
