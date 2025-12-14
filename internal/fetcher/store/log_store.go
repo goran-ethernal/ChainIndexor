@@ -255,7 +255,8 @@ func (s *LogStore) storeLogsInternal(
 	})
 
 	for i, address := range addresses {
-		topics := topics[i]
+		// Capture loop variables to avoid race conditions
+		addressTopics := topics[i]
 
 		g.Go(func() error {
 			// Record coverage
@@ -265,7 +266,7 @@ func (s *LogStore) storeLogsInternal(
 			ON CONFLICT(address, from_block, to_block) DO NOTHING
 			`
 
-			_, err = tx.ExecContext(errCtx, coverageInsertQuery, address.Hex(), fromBlock, toBlock)
+			_, err := tx.ExecContext(errCtx, coverageInsertQuery, address.Hex(), fromBlock, toBlock)
 			if err != nil {
 				return fmt.Errorf("failed to insert coverage: %w", err)
 			}
@@ -277,8 +278,8 @@ func (s *LogStore) storeLogsInternal(
 			ON CONFLICT(address, topic0, from_block, to_block) DO NOTHING
 			`
 
-			for _, topic := range topics {
-				_, err = tx.ExecContext(errCtx, topicCoverageInsertQuery,
+			for _, topic := range addressTopics {
+				_, err := tx.ExecContext(errCtx, topicCoverageInsertQuery,
 					address.Hex(), topic.Hex(), fromBlock, toBlock)
 				if err != nil {
 					return fmt.Errorf("failed to insert topic coverage: %w", err)
