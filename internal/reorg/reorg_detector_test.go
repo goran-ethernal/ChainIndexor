@@ -46,7 +46,7 @@ func setupTestReorgDetector(t *testing.T) (*ReorgDetector, *mocks.EthClient, fun
 	log, err := logger.NewLogger("error", true)
 	require.NoError(t, err)
 
-	detector, err := NewReorgDetector(database, mockRPC, log)
+	detector, err := NewReorgDetector(database, mockRPC, log, &db.NoOpMaintenance{})
 	require.NoError(t, err)
 
 	cleanup := func() {

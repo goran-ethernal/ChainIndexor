@@ -7,6 +7,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/goran-ethernal/ChainIndexor/internal/db"
 	"github.com/goran-ethernal/ChainIndexor/internal/indexer"
 	"github.com/goran-ethernal/ChainIndexor/internal/logger"
 	"github.com/goran-ethernal/ChainIndexor/pkg/config"
@@ -44,7 +45,7 @@ func TestDownloaderCreation(t *testing.T) {
 	tmpDB, cleanup := setupTestDB(t)
 	defer cleanup()
 
-	sm, err := NewSyncManager(tmpDB, log)
+	sm, err := NewSyncManager(tmpDB, log, &db.NoOpMaintenance{})
 	require.NoError(t, err)
 	defer sm.Close()
 
@@ -61,7 +62,7 @@ func TestIndexerRegistration(t *testing.T) {
 	tmpDB, cleanup := setupTestDB(t)
 	defer cleanup()
 
-	sm, err := NewSyncManager(tmpDB, log)
+	sm, err := NewSyncManager(tmpDB, log, &db.NoOpMaintenance{})
 	require.NoError(t, err)
 	defer sm.Close()
 

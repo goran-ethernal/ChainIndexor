@@ -23,25 +23,27 @@ var _ store.LogStore = (*LogStore)(nil)
 
 // LogStore implements LogStore interface using SQLite as the backend.
 type LogStore struct {
-	dbConfig config.DatabaseConfig
-	db       *sql.DB
-	log      *logger.Logger
-
-	retentionPolicy *config.RetentionPolicyConfig
+	dbConfig               config.DatabaseConfig
+	db                     *sql.DB
+	log                    *logger.Logger
+	retentionPolicy        *config.RetentionPolicyConfig
+	maintenanceCoordinator db.Maintenance
 }
 
 // NewLogStore creates a new SQLite-backed LogStore.
 func NewLogStore(
-	db *sql.DB,
+	database *sql.DB,
 	log *logger.Logger,
 	dbConfig config.DatabaseConfig,
 	retentionPolicy *config.RetentionPolicyConfig,
+	maintenanceCoordinator db.Maintenance,
 ) *LogStore {
 	return &LogStore{
-		db:              db,
-		log:             log,
-		dbConfig:        dbConfig,
-		retentionPolicy: retentionPolicy,
+		db:                     database,
+		log:                    log,
+		dbConfig:               dbConfig,
+		retentionPolicy:        retentionPolicy,
+		maintenanceCoordinator: maintenanceCoordinator,
 	}
 }
 
@@ -51,6 +53,10 @@ func (s *LogStore) GetLogs(
 	address ethcommon.Address,
 	fromBlock, toBlock uint64,
 ) ([]types.Log, []store.CoverageRange, error) {
+	// Acquire operation lock if maintenance coordinator is available
+	unlock := s.maintenanceCoordinator.AcquireOperationLock()
+	defer unlock()
+
 	// Get coverage information
 	const coverageQuery = `
 		SELECT * FROM log_coverage
@@ -99,6 +105,10 @@ func (s *LogStore) GetUnsyncedTopics(
 	topics [][]ethcommon.Hash,
 	upToBlock uint64,
 ) (*store.UnsyncedTopics, error) {
+	// Acquire operation lock if maintenance coordinator is available
+	unlock := s.maintenanceCoordinator.AcquireOperationLock()
+	defer unlock()
+
 	result := store.NewUnsyncedTopics()
 
 	// For each address-topic combination, check if there's complete coverage up to upToBlock
@@ -195,6 +205,10 @@ func (s *LogStore) StoreLogs(
 	logs []types.Log,
 	fromBlock, toBlock uint64,
 ) error {
+	// Acquire operation lock if maintenance coordinator is available
+	unlock := s.maintenanceCoordinator.AcquireOperationLock()
+	defer unlock()
+
 	if len(addresses) != len(topics) {
 		return fmt.Errorf("addresses and topics length mismatch: %d vs %d", len(addresses), len(topics))
 	}
@@ -306,6 +320,10 @@ func (s *LogStore) storeLogsInternal(
 
 // HandleReorg marks logs as removed starting from the given block number.
 func (s *LogStore) HandleReorg(ctx context.Context, fromBlock uint64) error {
+	// Acquire operation lock if maintenance coordinator is available
+	unlock := s.maintenanceCoordinator.AcquireOperationLock()
+	defer unlock()
+
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("failed to begin transaction: %w", err)
@@ -386,12 +404,6 @@ func (s *LogStore) HandleReorg(ctx context.Context, fromBlock uint64) error {
 	return nil
 }
 
-// PruneLogsBeforeBlock removes logs before the given block number from the store.
-func (s *LogStore) PruneLogsBeforeBlock(ctx context.Context, beforeBlock uint64) error {
-	_, err := s.pruneLogsBeforeBlock(ctx, beforeBlock)
-	return err
-}
-
 func (s *LogStore) pruneLogsBeforeBlock(ctx context.Context, beforeBlock uint64) (uint64, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -448,11 +460,6 @@ func (s *LogStore) pruneLogsBeforeBlock(ctx context.Context, beforeBlock uint64)
 
 	if err := tx.Commit(); err != nil {
 		return 0, fmt.Errorf("failed to commit transaction: %w", err)
-	}
-
-	// Vacuum to reclaim space
-	if err := db.Vacuum(s.db); err != nil {
-		s.log.Warnf("failed to vacuum database: %v", err)
 	}
 
 	s.log.Infof("Pruned %d logs before block %d", rowsAffected, beforeBlock)

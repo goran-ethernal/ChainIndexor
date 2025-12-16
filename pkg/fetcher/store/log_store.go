@@ -36,10 +36,6 @@ type LogStore interface {
 	// This should be called when a reorg is detected to remove invalidated cached data.
 	HandleReorg(ctx context.Context, fromBlock uint64) error
 
-	// PruneLogsBeforeBlock removes logs before the given block number from the store.
-	// This is used to clean up old finalized data and save storage space.
-	PruneLogsBeforeBlock(ctx context.Context, beforeBlock uint64) error
-
 	// GetUnsyncedTopics returns a map of addresses to topics that have not been synced up to the given block.
 	// This is useful for determining which address-topic combinations need to be fetched.
 	GetUnsyncedTopics(

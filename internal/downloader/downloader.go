@@ -8,6 +8,7 @@ import (
 	"sync"
 
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/goran-ethernal/ChainIndexor/internal/db"
 	"github.com/goran-ethernal/ChainIndexor/internal/fetcher"
 	"github.com/goran-ethernal/ChainIndexor/internal/fetcher/store"
 	"github.com/goran-ethernal/ChainIndexor/internal/indexer"
@@ -21,17 +22,20 @@ import (
 	"github.com/goran-ethernal/ChainIndexor/pkg/reorg"
 )
 
+var _ downloader.Downloader = (*Downloader)(nil)
+
 // Downloader orchestrates the log downloading process.
 // It coordinates LogFetcher, SyncManager, and IndexerCoordinator to stream
 // blockchain logs to registered indexers.
 type Downloader struct {
-	cfg           config.DownloaderConfig
-	rpc           *rpc.Client
-	reorgDetector reorg.Detector
-	syncManager   downloader.SyncManager
-	log           *logger.Logger
-	coordinator   *indexer.IndexerCoordinator
-	logFetcher    fch.LogFetcher
+	cfg                    config.DownloaderConfig
+	rpc                    *rpc.Client
+	reorgDetector          reorg.Detector
+	syncManager            downloader.SyncManager
+	log                    *logger.Logger
+	coordinator            *indexer.IndexerCoordinator
+	logFetcher             fch.LogFetcher
+	maintenanceCoordinator db.Maintenance
 
 	// Filter configuration built from registered indexers
 	mu        sync.RWMutex
@@ -48,6 +52,7 @@ func New(
 	rpcClient *rpc.Client,
 	reorgDetector reorg.Detector,
 	syncManager downloader.SyncManager,
+	maintenanceCoordinator db.Maintenance,
 	log *logger.Logger,
 ) (*Downloader, error) {
 	if rpcClient == nil {
@@ -64,15 +69,16 @@ func New(
 	}
 
 	d := &Downloader{
-		cfg:                cfg,
-		rpc:                rpcClient,
-		reorgDetector:      reorgDetector,
-		syncManager:        syncManager,
-		log:                log.WithComponent("downloader"),
-		coordinator:        indexer.NewIndexerCoordinator(),
-		addresses:          make([]common.Address, 0),
-		topics:             make([][]common.Hash, 0),
-		addressStartBlocks: make(map[common.Address]uint64),
+		cfg:                    cfg,
+		rpc:                    rpcClient,
+		reorgDetector:          reorgDetector,
+		syncManager:            syncManager,
+		maintenanceCoordinator: maintenanceCoordinator,
+		log:                    log.WithComponent("downloader"),
+		coordinator:            indexer.NewIndexerCoordinator(),
+		addresses:              make([]common.Address, 0),
+		topics:                 make([][]common.Hash, 0),
+		addressStartBlocks:     make(map[common.Address]uint64),
 	}
 
 	d.log.Info("downloader initialized")
@@ -166,6 +172,13 @@ func (d *Downloader) getDownloaderStartBlock() uint64 {
 func (d *Downloader) Download(ctx context.Context) error {
 	d.log.Info("starting download process")
 
+	// Start maintenance coordinator if configured
+	if d.maintenanceCoordinator != nil {
+		if err := d.maintenanceCoordinator.Start(ctx); err != nil {
+			return fmt.Errorf("failed to start maintenance coordinator: %w", err)
+		}
+	}
+
 	// Parse finality from config string
 	finality, err := types.ParseBlockFinality(d.cfg.Finality)
 	if err != nil {
@@ -189,7 +202,7 @@ func (d *Downloader) Download(ctx context.Context) error {
 	d.mu.RUnlock()
 
 	// Create LogStore using the sync manager's database connection
-	logStore := store.NewLogStore(d.syncManager.DB(), d.log, d.cfg.DB, d.cfg.RetentionPolicy)
+	logStore := store.NewLogStore(d.syncManager.DB(), d.log, d.cfg.DB, d.cfg.RetentionPolicy, d.maintenanceCoordinator)
 
 	d.logFetcher = fetcher.NewLogFetcher(fetcher.LogFetcherConfig{
 		ChunkSize:          d.cfg.ChunkSize,
@@ -348,6 +361,12 @@ func (d *Downloader) Close() error {
 	if d.reorgDetector != nil {
 		if err := d.reorgDetector.Close(); err != nil {
 			d.log.Errorw("failed to close reorg detector", "error", err)
+		}
+	}
+
+	if d.maintenanceCoordinator != nil {
+		if err := d.maintenanceCoordinator.Stop(); err != nil {
+			d.log.Errorw("failed to stop maintenance coordinator", "error", err)
 		}
 	}
 

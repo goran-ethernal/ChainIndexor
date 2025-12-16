@@ -18,6 +18,13 @@ import (
 
 func setupTestLogStore(t *testing.T) (*LogStore, func()) {
 	t.Helper()
+	return setupTestLogStoreWithRetention(t, nil, nil)
+}
+
+func setupTestLogStoreWithRetention(t *testing.T,
+	retentionPolicy *config.RetentionPolicyConfig,
+	maintenanceCoordinatorCfg *config.MaintenanceConfig) (*LogStore, func()) {
+	t.Helper()
 
 	// Create temporary database
 	tmpFile, err := os.CreateTemp("", "logstore_test_*.db")
@@ -37,8 +44,10 @@ func setupTestLogStore(t *testing.T) (*LogStore, func()) {
 	err = migrations.RunMigrations(dbConfig)
 	require.NoError(t, err)
 
+	maintenanceCoordinator := db.NewMaintenanceCoordinator(sqlDB, maintenanceCoordinatorCfg, logger.GetDefaultLogger())
+
 	// Create log store with proper dbConfig
-	store := NewLogStore(sqlDB, logger.GetDefaultLogger(), dbConfig, nil)
+	store := NewLogStore(sqlDB, logger.GetDefaultLogger(), dbConfig, retentionPolicy, maintenanceCoordinator)
 
 	cleanup := func() {
 		sqlDB.Close()
@@ -168,39 +177,6 @@ func TestLogStore_HandleReorg(t *testing.T) {
 	require.Len(t, coverage, 1, "coverage should be truncated to 100-102")
 	require.Equal(t, uint64(100), coverage[0].FromBlock)
 	require.Equal(t, uint64(102), coverage[0].ToBlock)
-}
-
-func TestLogStore_PruneLogsBeforeBlock(t *testing.T) {
-	store, cleanup := setupTestLogStore(t)
-	defer cleanup()
-
-	ctx := context.Background()
-	address := common.HexToAddress("0x1234567890123456789012345678901234567890")
-
-	// Store logs for blocks 100-105
-	logs := []types.Log{
-		createTestLog(address, 100, common.HexToHash("0xaaa"), 0),
-		createTestLog(address, 101, common.HexToHash("0xbbb"), 0),
-		createTestLog(address, 102, common.HexToHash("0xccc"), 0),
-		createTestLog(address, 103, common.HexToHash("0xddd"), 0),
-		createTestLog(address, 104, common.HexToHash("0xeee"), 0),
-		createTestLog(address, 105, common.HexToHash("0xfff"), 0),
-	}
-	topics := []common.Hash{common.HexToHash("0x1234")}
-	err := store.StoreLogs(ctx, []common.Address{address}, [][]common.Hash{topics}, logs, 100, 105)
-	require.NoError(t, err)
-
-	// Prune logs before block 103
-	err = store.PruneLogsBeforeBlock(ctx, 103)
-	require.NoError(t, err)
-
-	// Retrieve logs - should only get blocks 103-105
-	retrievedLogs, _, err := store.GetLogs(ctx, address, 100, 105)
-	require.NoError(t, err)
-	require.Len(t, retrievedLogs, 3, "should only have logs for blocks 103-105")
-	require.Equal(t, uint64(103), retrievedLogs[0].BlockNumber)
-	require.Equal(t, uint64(104), retrievedLogs[1].BlockNumber)
-	require.Equal(t, uint64(105), retrievedLogs[2].BlockNumber)
 }
 
 func TestLogStore_MultipleAddresses(t *testing.T) {
@@ -942,29 +918,14 @@ func TestLogStore_CalculateBlocksToFreeSpace(t *testing.T) {
 
 func TestLogStore_RetentionPolicy(t *testing.T) {
 	t.Run("MaxBlocksFromFinalized", func(t *testing.T) {
-		// Setup store with retention policy
-		tmpFile, err := os.CreateTemp("", "logstore_retention_blocks_*.db")
-		require.NoError(t, err)
-		tmpFile.Close()
-		dbPath := tmpFile.Name()
-		defer os.Remove(dbPath)
-
-		dbConfig := config.DatabaseConfig{Path: dbPath}
-		dbConfig.ApplyDefaults()
-		sqlDB, err := db.NewSQLiteDBFromConfig(dbConfig)
-		require.NoError(t, err)
-		defer sqlDB.Close()
-
-		err = migrations.RunMigrations(dbConfig)
-		require.NoError(t, err)
-
 		// Retention policy: keep only 100 blocks from finalized
 		retentionPolicy := &config.RetentionPolicyConfig{
 			MaxBlocks:   100,
 			MaxDBSizeMB: 0, // disabled
 		}
 
-		store := NewLogStore(sqlDB, logger.GetDefaultLogger(), dbConfig, retentionPolicy)
+		store, cleanup := setupTestLogStoreWithRetention(t, retentionPolicy, nil)
+		defer cleanup()
 
 		ctx := context.Background()
 		address1 := common.HexToAddress("0x1111111111111111111111111111111111111111")
@@ -992,7 +953,7 @@ func TestLogStore_RetentionPolicy(t *testing.T) {
 			fromBlock := chunk[0].BlockNumber
 			toBlock := chunk[len(chunk)-1].BlockNumber
 
-			err = store.storeLogsInternal(ctx,
+			err := store.storeLogsInternal(ctx,
 				[]common.Address{address1, address2},
 				[][]common.Hash{{topic1}, {topic2}},
 				chunk,
@@ -1004,7 +965,7 @@ func TestLogStore_RetentionPolicy(t *testing.T) {
 
 		// Verify all logs are stored
 		var totalLogsBefore int64
-		err = sqlDB.QueryRow("SELECT COUNT(*) FROM event_logs").Scan(&totalLogsBefore)
+		err := store.db.QueryRow("SELECT COUNT(*) FROM event_logs").Scan(&totalLogsBefore)
 		require.NoError(t, err)
 		require.Equal(t, int64(2000), totalLogsBefore) // 500 blocks * 4 logs/block
 
@@ -1016,7 +977,7 @@ func TestLogStore_RetentionPolicy(t *testing.T) {
 
 		// Verify pruning occurred
 		var totalLogsAfter, minBlock, maxBlock int64
-		err = sqlDB.QueryRow("SELECT COUNT(*), MIN(block_number), MAX(block_number) FROM event_logs").
+		err = store.db.QueryRow("SELECT COUNT(*), MIN(block_number), MAX(block_number) FROM event_logs").
 			Scan(&totalLogsAfter, &minBlock, &maxBlock)
 		require.NoError(t, err)
 
@@ -1030,40 +991,28 @@ func TestLogStore_RetentionPolicy(t *testing.T) {
 
 		// Verify coverage was also pruned
 		var coverageCount int64
-		err = sqlDB.QueryRow("SELECT COUNT(*) FROM log_coverage WHERE to_block < 1300").Scan(&coverageCount)
+		err = store.db.QueryRow("SELECT COUNT(*) FROM log_coverage WHERE to_block < 1300").Scan(&coverageCount)
 		require.NoError(t, err)
 		require.Equal(t, int64(0), coverageCount, "old coverage should be deleted")
 
 		var topicCoverageCount int64
-		err = sqlDB.QueryRow("SELECT COUNT(*) FROM topic_coverage WHERE to_block < 1300").Scan(&topicCoverageCount)
+		err = store.db.QueryRow("SELECT COUNT(*) FROM topic_coverage WHERE to_block < 1300").Scan(&topicCoverageCount)
 		require.NoError(t, err)
 		require.Equal(t, int64(0), topicCoverageCount, "old topic coverage should be deleted")
 	})
 
 	t.Run("MaxDBSizeMB", func(t *testing.T) {
-		// Setup store with size-based retention policy
-		tmpFile, err := os.CreateTemp("", "logstore_retention_size_*.db")
-		require.NoError(t, err)
-		tmpFile.Close()
-		dbPath := tmpFile.Name()
-		defer os.Remove(dbPath)
-
-		dbConfig := config.DatabaseConfig{Path: dbPath}
-		dbConfig.ApplyDefaults()
-		sqlDB, err := db.NewSQLiteDBFromConfig(dbConfig)
-		require.NoError(t, err)
-		defer sqlDB.Close()
-
-		err = migrations.RunMigrations(dbConfig)
-		require.NoError(t, err)
-
 		// Retention policy: limit database to 5 MB
 		retentionPolicy := &config.RetentionPolicyConfig{
 			MaxBlocks:   0, // disabled
 			MaxDBSizeMB: 5,
 		}
 
-		store := NewLogStore(sqlDB, logger.GetDefaultLogger(), dbConfig, retentionPolicy)
+		dbMaintenanceCfg := &config.MaintenanceConfig{}
+		dbMaintenanceCfg.ApplyDefaults()
+
+		store, cleanup := setupTestLogStoreWithRetention(t, retentionPolicy, dbMaintenanceCfg)
+		defer cleanup()
 
 		ctx := context.Background()
 		address := common.HexToAddress("0x1111111111111111111111111111111111111111")
@@ -1073,7 +1022,7 @@ func TestLogStore_RetentionPolicy(t *testing.T) {
 		// Each log is ~200-300 bytes, so ~20,000 logs should be ~4-6 MB
 		var allLogs []types.Log
 		for block := uint64(1000); block < 6000; block++ {
-			for i := uint(0); i < 4; i++ {
+			for i := range uint(4) {
 				log := createTestLog(address, block, common.BytesToHash([]byte{byte(block), byte(i)}), i)
 				// Add some data to make logs bigger
 				log.Data = make([]byte, 100)
@@ -1092,7 +1041,7 @@ func TestLogStore_RetentionPolicy(t *testing.T) {
 			fromBlock := chunk[0].BlockNumber
 			toBlock := chunk[len(chunk)-1].BlockNumber
 
-			err = store.storeLogsInternal(ctx,
+			err := store.storeLogsInternal(ctx,
 				[]common.Address{address},
 				[][]common.Hash{{topic}},
 				chunk,
@@ -1114,6 +1063,8 @@ func TestLogStore_RetentionPolicy(t *testing.T) {
 		err = store.applyRetentionIfNeeded(ctx)
 		require.NoError(t, err)
 
+		require.NoError(t, store.maintenanceCoordinator.RunMaintenance(ctx))
+
 		// Get size after pruning
 		sizeAfter, err := store.getDatabaseSizeMB()
 		require.NoError(t, err)
@@ -1124,7 +1075,7 @@ func TestLogStore_RetentionPolicy(t *testing.T) {
 
 		// Verify some logs were deleted
 		var totalLogsAfter int64
-		err = sqlDB.QueryRow("SELECT COUNT(*) FROM event_logs").Scan(&totalLogsAfter)
+		err = store.db.QueryRow("SELECT COUNT(*) FROM event_logs").Scan(&totalLogsAfter)
 		require.NoError(t, err)
 		require.Less(t, totalLogsAfter, int64(len(allLogs)), "should have pruned some logs")
 		t.Logf("Logs after retention: %d (before: %d)", totalLogsAfter, len(allLogs))
@@ -1132,28 +1083,15 @@ func TestLogStore_RetentionPolicy(t *testing.T) {
 
 	t.Run("CombinedPolicy", func(t *testing.T) {
 		// Test both policies active - should use whichever is more aggressive
-		tmpFile, err := os.CreateTemp("", "logstore_retention_combined_*.db")
-		require.NoError(t, err)
-		tmpFile.Close()
-		dbPath := tmpFile.Name()
-		defer os.Remove(dbPath)
-
-		dbConfig := config.DatabaseConfig{Path: dbPath}
-		dbConfig.ApplyDefaults()
-
-		sqlDB, err := db.NewSQLiteDBFromConfig(dbConfig)
-		require.NoError(t, err)
-		defer sqlDB.Close()
-
-		err = migrations.RunMigrations(dbConfig)
-		require.NoError(t, err)
-
 		retentionPolicy := &config.RetentionPolicyConfig{
 			MaxBlocks:   200, // keep 200 blocks
 			MaxDBSizeMB: 3,   // limit to 3 MB
 		}
 
-		store := NewLogStore(sqlDB, logger.GetDefaultLogger(), dbConfig, retentionPolicy)
+		dbMaintenanceCfg := &config.MaintenanceConfig{}
+		dbMaintenanceCfg.ApplyDefaults()
+		store, cleanup := setupTestLogStoreWithRetention(t, retentionPolicy, dbMaintenanceCfg)
+		defer cleanup()
 
 		ctx := context.Background()
 		address := common.HexToAddress("0x1111111111111111111111111111111111111111")
@@ -1177,7 +1115,7 @@ func TestLogStore_RetentionPolicy(t *testing.T) {
 			fromBlock := chunk[0].BlockNumber
 			toBlock := chunk[len(chunk)-1].BlockNumber
 
-			err = store.storeLogsInternal(ctx,
+			err := store.storeLogsInternal(ctx,
 				[]common.Address{address},
 				[][]common.Hash{{topic}},
 				chunk,
@@ -1195,10 +1133,11 @@ func TestLogStore_RetentionPolicy(t *testing.T) {
 		require.NoError(t, err)
 
 		var minBlock, totalLogs int64
-		err = sqlDB.QueryRow("SELECT MIN(block_number), COUNT(*) FROM event_logs").
+		err = store.db.QueryRow("SELECT MIN(block_number), COUNT(*) FROM event_logs").
 			Scan(&minBlock, &totalLogs)
 		require.NoError(t, err)
 
+		require.NoError(t, store.maintenanceCoordinator.RunMaintenance(ctx))
 		sizeAfter, err := store.getDatabaseSizeMB()
 		require.NoError(t, err)
 

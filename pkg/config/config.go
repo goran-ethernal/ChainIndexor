@@ -1,6 +1,9 @@
 package config
 
-import "fmt"
+import (
+	"fmt"
+	"time"
+)
 
 // Config represents the complete configuration for the ChainIndexor.
 type Config struct {
@@ -31,6 +34,9 @@ type DownloaderConfig struct {
 
 	// RetentionPolicy contains optional database retention policy settings
 	RetentionPolicy *RetentionPolicyConfig `yaml:"retention_policy,omitempty"`
+
+	// Maintenance contains optional database maintenance settings
+	Maintenance *MaintenanceConfig `yaml:"maintenance,omitempty"`
 }
 
 // ApplyDefaults sets default values for optional downloader configuration fields.
@@ -41,6 +47,10 @@ func (d *DownloaderConfig) ApplyDefaults() {
 	}
 	if d.Finality == "" {
 		d.Finality = "finalized"
+	}
+
+	if d.Maintenance != nil {
+		d.Maintenance.ApplyDefaults()
 	}
 
 	// Apply database defaults
@@ -113,6 +123,66 @@ func (r *RetentionPolicyConfig) IsEnabled() bool {
 	return r != nil && (r.MaxDBSizeMB > 0 || r.MaxBlocks > 0)
 }
 
+// MaintenanceConfig configures database maintenance behavior.
+type MaintenanceConfig struct {
+	// Enabled controls whether background maintenance runs
+	Enabled bool `yaml:"enabled" json:"enabled" toml:"enabled"`
+
+	// CheckInterval is how often to run maintenance (e.g., "30m", "1h")
+	CheckInterval string `yaml:"check_interval" json:"check_interval" toml:"check_interval"`
+
+	// VacuumOnStartup runs maintenance immediately on startup
+	VacuumOnStartup bool `yaml:"vacuum_on_startup" json:"vacuum_on_startup" toml:"vacuum_on_startup"`
+
+	// WALCheckpointMode controls the WAL checkpoint aggressiveness
+	// Options: PASSIVE, FULL, RESTART, TRUNCATE
+	// TRUNCATE is recommended for production (most aggressive space reclamation)
+	WALCheckpointMode string `yaml:"wal_checkpoint_mode" json:"wal_checkpoint_mode" toml:"wal_checkpoint_mode"`
+}
+
+// ApplyDefaults sets default values for optional maintenance configuration fields.
+func (m *MaintenanceConfig) ApplyDefaults() {
+	if m.CheckInterval == "" {
+		m.CheckInterval = "30m"
+	}
+	if m.WALCheckpointMode == "" {
+		m.WALCheckpointMode = "TRUNCATE"
+	}
+	// Enabled defaults to false (zero value)
+	// VacuumOnStartup defaults to false (zero value)
+}
+
+// Validate checks if the maintenance configuration is valid.
+func (m *MaintenanceConfig) Validate() error {
+	if m.CheckInterval != "" {
+		// Try parsing the duration
+		if _, err := time.ParseDuration(m.CheckInterval); err != nil {
+			return fmt.Errorf("maintenance.check_interval: invalid duration format '%s'", m.CheckInterval)
+		}
+	}
+
+	if m.WALCheckpointMode != "" {
+		validModes := []string{"PASSIVE", "FULL", "RESTART", "TRUNCATE"}
+		valid := false
+		for _, mode := range validModes {
+			if m.WALCheckpointMode == mode {
+				valid = true
+				break
+			}
+		}
+		if !valid {
+			return fmt.Errorf("maintenance.wal_checkpoint_mode: must be one of: PASSIVE, FULL, RESTART, TRUNCATE")
+		}
+	}
+
+	return nil
+}
+
+// ParsedCheckInterval returns the parsed check interval duration.
+func (m *MaintenanceConfig) ParsedCheckInterval() (time.Duration, error) {
+	return time.ParseDuration(m.CheckInterval)
+}
+
 // IndexerConfig represents the configuration for a single indexer.
 type IndexerConfig struct {
 	// Name is a unique identifier for this indexer
@@ -180,6 +250,12 @@ func (c *Config) Validate() error {
 	if c.Downloader.DB.Synchronous != "" && c.Downloader.DB.Synchronous != "FULL" &&
 		c.Downloader.DB.Synchronous != "NORMAL" && c.Downloader.DB.Synchronous != "OFF" {
 		return fmt.Errorf("downloader.db.synchronous must be one of: FULL, NORMAL, OFF")
+	}
+
+	if c.Downloader.Maintenance != nil {
+		if err := c.Downloader.Maintenance.Validate(); err != nil {
+			return fmt.Errorf("downloader.maintenance: %w", err)
+		}
 	}
 
 	if len(c.Indexers) == 0 {
