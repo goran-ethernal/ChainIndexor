@@ -43,7 +43,7 @@ func TestRun(t *testing.T) {
 		t.Fatalf("failed to create database: %v", err)
 	}
 
-	dbMaintainance := db.NewMaintenanceCoordinator(database,
+	dbMaintainance := db.NewMaintenanceCoordinator(cfg.Downloader.DB.Path, database,
 		cfg.Downloader.Maintenance, logger.GetDefaultLogger())
 
 	reorgDetector, err := reorg.NewReorgDetector(database, ethClient, logger.GetDefaultLogger(), dbMaintainance)
