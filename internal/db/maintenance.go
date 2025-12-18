@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/goran-ethernal/ChainIndexor/internal/common"
 	"github.com/goran-ethernal/ChainIndexor/internal/logger"
 	"github.com/goran-ethernal/ChainIndexor/pkg/config"
 )
@@ -60,6 +61,7 @@ func (m *NoOpMaintenance) GetMetrics() MaintenanceMetrics {
 type MaintenanceCoordinator struct {
 	db     *sql.DB
 	config config.MaintenanceConfig
+	dbPath string
 	log    *logger.Logger
 
 	// RWMutex: readers = operations, writer = maintenance
@@ -81,6 +83,7 @@ type MaintenanceCoordinator struct {
 
 // NewMaintenanceCoordinator creates a new maintenance coordinator.
 func NewMaintenanceCoordinator(
+	dbPath string,
 	db *sql.DB,
 	cfg *config.MaintenanceConfig,
 	log *logger.Logger,
@@ -89,11 +92,12 @@ func NewMaintenanceCoordinator(
 		return &NoOpMaintenance{}
 	}
 
-	return newMaintenanceCoordinator(db, *cfg, log)
+	return newMaintenanceCoordinator(dbPath, db, *cfg, log)
 }
 
 // newMaintenanceCoordinator is an internal constructor for MaintenanceCoordinator.
 func newMaintenanceCoordinator(
+	dbPath string,
 	db *sql.DB,
 	cfg config.MaintenanceConfig,
 	log *logger.Logger,
@@ -101,6 +105,7 @@ func newMaintenanceCoordinator(
 	return &MaintenanceCoordinator{
 		db:     db,
 		config: cfg,
+		dbPath: dbPath,
 		log:    log.WithComponent("db-maintenance"),
 	}
 }
@@ -190,6 +195,11 @@ func (m *MaintenanceCoordinator) RunMaintenance(ctx context.Context) error {
 
 	var maintenanceErr error
 
+	initialDBSize, err := DBTotalSize(m.dbPath)
+	if err != nil {
+		m.log.Warnf("Failed to get initial DB size: %v", err)
+	}
+
 	// Step 1: WAL Checkpoint
 	if err := m.walCheckpoint(); err != nil {
 		m.log.Errorf("WAL checkpoint failed: %v", err)
@@ -202,6 +212,11 @@ func (m *MaintenanceCoordinator) RunMaintenance(ctx context.Context) error {
 		if maintenanceErr == nil {
 			maintenanceErr = fmt.Errorf("VACUUM failed: %w", err)
 		}
+	}
+
+	finalDBSize, err := DBTotalSize(m.dbPath)
+	if err != nil {
+		m.log.Warnf("Failed to get final DB size: %v", err)
 	}
 
 	duration := time.Since(start)
@@ -218,7 +233,12 @@ func (m *MaintenanceCoordinator) RunMaintenance(ctx context.Context) error {
 		return maintenanceErr
 	}
 
-	m.log.Infof("Maintenance completed successfully in %v", duration)
+	m.log.Infof("Maintenance completed successfully in %v.", duration)
+
+	if initialDBSize > finalDBSize {
+		m.log.Infof("Maintenance cleaned: %d MB", common.BytesToMB(uint64(initialDBSize-finalDBSize)))
+	}
+
 	return nil
 }
 

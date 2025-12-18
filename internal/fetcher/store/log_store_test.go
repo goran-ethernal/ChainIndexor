@@ -44,7 +44,8 @@ func setupTestLogStoreWithRetention(t *testing.T,
 	err = migrations.RunMigrations(dbConfig)
 	require.NoError(t, err)
 
-	maintenanceCoordinator := db.NewMaintenanceCoordinator(sqlDB, maintenanceCoordinatorCfg, logger.GetDefaultLogger())
+	maintenanceCoordinator := db.NewMaintenanceCoordinator(dbPath, sqlDB,
+		maintenanceCoordinatorCfg, logger.GetDefaultLogger())
 
 	// Create log store with proper dbConfig
 	store := NewLogStore(sqlDB, logger.GetDefaultLogger(), dbConfig, retentionPolicy, maintenanceCoordinator)

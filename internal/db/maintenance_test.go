@@ -55,7 +55,7 @@ func setupMaintenanceTestDB(t *testing.T) (*sql.DB, string, func()) {
 }
 
 func TestMaintenanceCoordinator_NewMaintenanceCoordinator(t *testing.T) {
-	db, _, cleanup := setupMaintenanceTestDB(t)
+	db, dbPath, cleanup := setupMaintenanceTestDB(t)
 	defer cleanup()
 
 	log, err := logger.NewLogger("info", true)
@@ -68,7 +68,7 @@ func TestMaintenanceCoordinator_NewMaintenanceCoordinator(t *testing.T) {
 		WALCheckpointMode: "TRUNCATE",
 	}
 
-	coordinator := newMaintenanceCoordinator(db, cfg, log)
+	coordinator := newMaintenanceCoordinator(dbPath, db, cfg, log)
 	require.NotNil(t, coordinator)
 	require.NotNil(t, coordinator.db)
 	require.Equal(t, "TRUNCATE", coordinator.config.WALCheckpointMode)
@@ -98,7 +98,7 @@ func TestMaintenanceCoordinator_RunMaintenance(t *testing.T) {
 		WALCheckpointMode: "TRUNCATE",
 	}
 
-	coordinator := newMaintenanceCoordinator(db, cfg, log)
+	coordinator := newMaintenanceCoordinator(dbPath, db, cfg, log)
 
 	// Run maintenance manually
 	err = coordinator.RunMaintenance(context.Background())
@@ -135,7 +135,7 @@ func TestMaintenanceCoordinator_WALCheckpoint(t *testing.T) {
 		WALCheckpointMode: "TRUNCATE",
 	}
 
-	coordinator := newMaintenanceCoordinator(db, cfg, log)
+	coordinator := newMaintenanceCoordinator(dbPath, db, cfg, log)
 	err = coordinator.walCheckpoint()
 	require.NoError(t, err)
 
@@ -150,7 +150,7 @@ func TestMaintenanceCoordinator_WALCheckpoint(t *testing.T) {
 }
 
 func TestMaintenanceCoordinator_OperationLock(t *testing.T) {
-	db, _, cleanup := setupMaintenanceTestDB(t)
+	db, dbPath, cleanup := setupMaintenanceTestDB(t)
 	defer cleanup()
 
 	log, err := logger.NewLogger("info", true)
@@ -161,7 +161,7 @@ func TestMaintenanceCoordinator_OperationLock(t *testing.T) {
 		WALCheckpointMode: "TRUNCATE",
 	}
 
-	coordinator := newMaintenanceCoordinator(db, cfg, log)
+	coordinator := newMaintenanceCoordinator(dbPath, db, cfg, log)
 
 	// Test that multiple operations can acquire read lock concurrently
 	var wg sync.WaitGroup
@@ -181,7 +181,7 @@ func TestMaintenanceCoordinator_OperationLock(t *testing.T) {
 }
 
 func TestMaintenanceCoordinator_MaintenanceBlocksOperations(t *testing.T) {
-	db, _, cleanup := setupMaintenanceTestDB(t)
+	db, dbPath, cleanup := setupMaintenanceTestDB(t)
 	defer cleanup()
 
 	log, err := logger.NewLogger("info", true)
@@ -192,7 +192,7 @@ func TestMaintenanceCoordinator_MaintenanceBlocksOperations(t *testing.T) {
 		WALCheckpointMode: "PASSIVE", // Use faster mode for testing
 	}
 
-	coordinator := newMaintenanceCoordinator(db, cfg, log)
+	coordinator := newMaintenanceCoordinator(dbPath, db, cfg, log)
 
 	var operationsBlocked atomic.Bool
 	var maintenanceStarted atomic.Bool
@@ -243,7 +243,7 @@ func TestMaintenanceCoordinator_MaintenanceBlocksOperations(t *testing.T) {
 }
 
 func TestMaintenanceCoordinator_BackgroundMaintenance(t *testing.T) {
-	db, _, cleanup := setupMaintenanceTestDB(t)
+	db, dbPath, cleanup := setupMaintenanceTestDB(t)
 	defer cleanup()
 
 	log, err := logger.NewLogger("info", true)
@@ -256,7 +256,7 @@ func TestMaintenanceCoordinator_BackgroundMaintenance(t *testing.T) {
 		WALCheckpointMode: "PASSIVE",
 	}
 
-	coordinator := newMaintenanceCoordinator(db, cfg, log)
+	coordinator := newMaintenanceCoordinator(dbPath, db, cfg, log)
 
 	// Start background maintenance
 	err = coordinator.Start(t.Context())
@@ -281,7 +281,7 @@ func TestMaintenanceCoordinator_BackgroundMaintenance(t *testing.T) {
 }
 
 func TestMaintenanceCoordinator_StartupMaintenance(t *testing.T) {
-	db, _, cleanup := setupMaintenanceTestDB(t)
+	db, dbPath, cleanup := setupMaintenanceTestDB(t)
 	defer cleanup()
 
 	log, err := logger.NewLogger("info", true)
@@ -300,7 +300,7 @@ func TestMaintenanceCoordinator_StartupMaintenance(t *testing.T) {
 		WALCheckpointMode: "TRUNCATE",
 	}
 
-	coordinator := newMaintenanceCoordinator(db, cfg, log)
+	coordinator := newMaintenanceCoordinator(dbPath, db, cfg, log)
 
 	// Start should run maintenance immediately
 	err = coordinator.Start(t.Context())
@@ -317,7 +317,7 @@ func TestMaintenanceCoordinator_StartupMaintenance(t *testing.T) {
 }
 
 func TestMaintenanceCoordinator_DisabledMaintenance(t *testing.T) {
-	db, _, cleanup := setupMaintenanceTestDB(t)
+	db, dbPath, cleanup := setupMaintenanceTestDB(t)
 	defer cleanup()
 
 	log, err := logger.NewLogger("info", true)
@@ -329,7 +329,7 @@ func TestMaintenanceCoordinator_DisabledMaintenance(t *testing.T) {
 		WALCheckpointMode: "TRUNCATE",
 	}
 
-	coordinator := newMaintenanceCoordinator(db, cfg, log)
+	coordinator := newMaintenanceCoordinator(dbPath, db, cfg, log)
 
 	err = coordinator.Start(t.Context())
 	require.NoError(t, err)
@@ -345,7 +345,7 @@ func TestMaintenanceCoordinator_DisabledMaintenance(t *testing.T) {
 }
 
 func TestMaintenanceCoordinator_ContextCancellation(t *testing.T) {
-	db, _, cleanup := setupMaintenanceTestDB(t)
+	db, dbPath, cleanup := setupMaintenanceTestDB(t)
 	defer cleanup()
 
 	log, err := logger.NewLogger("info", true)
@@ -356,7 +356,7 @@ func TestMaintenanceCoordinator_ContextCancellation(t *testing.T) {
 		WALCheckpointMode: "TRUNCATE",
 	}
 
-	coordinator := newMaintenanceCoordinator(db, config, log)
+	coordinator := newMaintenanceCoordinator(dbPath, db, config, log)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel() // Cancel immediately
@@ -367,7 +367,7 @@ func TestMaintenanceCoordinator_ContextCancellation(t *testing.T) {
 }
 
 func TestMaintenanceCoordinator_InvalidConfig(t *testing.T) {
-	db, _, cleanup := setupMaintenanceTestDB(t)
+	db, dbPath, cleanup := setupMaintenanceTestDB(t)
 	defer cleanup()
 
 	log, err := logger.NewLogger("info", true)
@@ -380,14 +380,14 @@ func TestMaintenanceCoordinator_InvalidConfig(t *testing.T) {
 	// Override default to test invalid case
 	cfg.CheckInterval = "invalid"
 
-	coordinator := newMaintenanceCoordinator(db, cfg, log)
+	coordinator := newMaintenanceCoordinator(dbPath, db, cfg, log)
 
 	err = coordinator.Start(t.Context())
 	require.Error(t, err, "Should fail with invalid check interval")
 }
 
 func TestMaintenanceCoordinator_ConcurrentOperationsDuringMaintenance(t *testing.T) {
-	db, _, cleanup := setupMaintenanceTestDB(t)
+	db, dbPath, cleanup := setupMaintenanceTestDB(t)
 	defer cleanup()
 
 	log, err := logger.NewLogger("info", true)
@@ -398,7 +398,7 @@ func TestMaintenanceCoordinator_ConcurrentOperationsDuringMaintenance(t *testing
 		WALCheckpointMode: "PASSIVE",
 	}
 
-	coordinator := newMaintenanceCoordinator(db, cfg, log)
+	coordinator := newMaintenanceCoordinator(dbPath, db, cfg, log)
 
 	var wg sync.WaitGroup
 	const numOperations = 50

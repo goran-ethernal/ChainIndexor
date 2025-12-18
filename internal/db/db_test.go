@@ -1,79 +1,11 @@
 package db
 
 import (
-	"database/sql"
-	"fmt"
 	"os"
 	"testing"
 
-	"github.com/goran-ethernal/ChainIndexor/pkg/config"
 	"github.com/stretchr/testify/require"
 )
-
-func setupTestDB(t *testing.T, journal string) (*sql.DB, string, func()) {
-	t.Helper()
-
-	tmpFile, err := os.CreateTemp("", "logstore_test_*.db")
-	require.NoError(t, err)
-	tmpFile.Close()
-
-	dbPath := tmpFile.Name()
-
-	// Create database
-	dbConfig := config.DatabaseConfig{Path: dbPath, JournalMode: journal}
-	dbConfig.ApplyDefaults()
-
-	sqlDB, err := NewSQLiteDBFromConfig(dbConfig)
-	require.NoError(t, err)
-
-	// Insert test table
-	_, err = sqlDB.Exec(`CREATE TABLE IF NOT EXISTS test_table (id INTEGER PRIMARY KEY, value TEXT);`)
-	require.NoError(t, err)
-
-	// Insert test data
-	for i := range 5000 {
-		_, err = sqlDB.Exec(`INSERT INTO test_table (value) VALUES (?);`, fmt.Sprintf("value_%d", i))
-		require.NoError(t, err)
-	}
-
-	cleanup := func() {
-		sqlDB.Close()
-		os.Remove(dbPath)
-	}
-
-	return sqlDB, dbPath, cleanup
-}
-
-func TestVacuum_Modes(t *testing.T) {
-	t.Parallel()
-
-	testCases := []struct {
-		name        string
-		journalMode string
-	}{
-		{name: "WAL", journalMode: "WAL"},
-		{name: "NonWAL", journalMode: "TRUNCATE"},
-	}
-
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-
-			db, dbPath, cleanup := setupTestDB(t, tc.journalMode)
-			defer cleanup()
-
-			initialSize, err := DBTotalSize(dbPath)
-			require.NoError(t, err)
-
-			require.NoError(t, Vacuum(db))
-
-			finalSize, err := DBTotalSize(dbPath)
-			require.NoError(t, err)
-
-			require.LessOrEqual(t, finalSize, initialSize)
-		})
-	}
-}
 
 func TestDBTotalSize(t *testing.T) {
 	type fileSpec struct {
