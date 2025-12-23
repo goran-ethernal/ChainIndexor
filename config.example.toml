@@ -22,6 +22,7 @@ max_blocks = 10000
 enabled = true
 check_interval = "5m"
 vacuum_on_startup = true
+wal_checkpoint_mode = "TRUNCATE"
 
 [[indexers]]
 name = "MyTokenIndexer"
