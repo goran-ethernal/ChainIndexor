@@ -239,18 +239,127 @@ indexers:
 - Enable `maintenance` with appropriate `check_interval` (e.g., `"30m"` or `"1h"`)
 - Use `wal_checkpoint_mode: "TRUNCATE"` for maximum space reclamation
 - Enable `vacuum_on_startup: true` for fresh starts after crashes
+- Configure logging levels per component for production monitoring
 
 **Development Settings:**
 
 - Use `finality: "latest"` for faster local testing
 - Disable retention policy or set high limits to keep all data
 - Use smaller `chunk_size` to test recursive splitting logic
+- Enable `logging.development: true` for detailed debug output with stack traces
 
 **Multi-Indexer Best Practices:**
 
 - Each indexer gets its own database for isolation
 - Set appropriate `start_block` per indexer to avoid unnecessary syncing
 - Use descriptive names for easier monitoring and debugging
+
+## 📊 Logging Configuration
+
+ChainIndexor provides structured logging with per-component log level configuration, allowing you to fine-tune verbosity for different parts of the system.
+
+### Logging Parameters
+
+| Parameter | Type | Required | Default | Description |
+| ----------- | ------ | ---------- | --------- | ------------- |
+| `default_level` | string | No | "info" | Default log level for all components: `"debug"`, `"info"`, `"warn"`, `"error"` |
+| `development` | bool | No | false | Enable development mode (stack traces, colored console output) |
+| `component_levels` | map | No | {} | Per-component log level overrides |
+
+### Available Components
+
+| Component | Description |
+| ----------- | ------------- |
+| `downloader` | Main download orchestration and indexer coordination |
+| `log-fetcher` | Blockchain log fetching and RPC interaction |
+| `sync-manager` | Sync state management and checkpoint persistence |
+| `reorg-detector` | Blockchain reorganization detection |
+| `log-store` | Log storage layer and database operations |
+| `maintenance` | Database maintenance operations (WAL checkpoint, VACUUM) |
+
+### Configuration Examples
+
+#### Basic Logging Configuration
+
+```yaml
+logging:
+  default_level: "info"
+  development: false
+```
+
+#### Per-Component Levels
+
+```yaml
+logging:
+  default_level: "info"
+  development: false
+  component_levels:
+    downloader: "info"
+    log-fetcher: "debug"      # verbose RPC logging
+    sync-manager: "info"
+    reorg-detector: "warn"    # only warnings and errors
+    log-store: "info"
+    maintenance: "debug"      # detailed maintenance logs
+```
+
+#### Development Mode
+
+```yaml
+logging:
+  default_level: "debug"
+  development: true           # enables stack traces and colored output
+  component_levels:
+    log-fetcher: "debug"
+    maintenance: "debug"
+```
+
+### Common Use Cases
+
+**Production Monitoring:**
+
+```yaml
+logging:
+  default_level: "info"
+  development: false
+  component_levels:
+    reorg-detector: "warn"    # reduce noise from normal operations
+    maintenance: "info"       # track maintenance operations
+```
+
+**Debugging RPC Issues:**
+
+```yaml
+logging:
+  default_level: "info"
+  component_levels:
+    log-fetcher: "debug"      # detailed RPC request/response logging
+```
+
+**Debugging Performance:**
+
+```yaml
+logging:
+  default_level: "info"
+  component_levels:
+    downloader: "debug"       # indexing throughput
+    sync-manager: "debug"     # checkpoint frequency
+    log-store: "debug"        # database operation timing
+```
+
+**Minimal Logging (High-Performance):**
+
+```yaml
+logging:
+  default_level: "warn"       # only warnings and errors
+  development: false
+```
+
+### Log Level Guidelines
+
+- **debug**: Verbose output including internal state, timing, and detailed operations. Use for troubleshooting.
+- **info**: Normal operational messages. Good default for production.
+- **warn**: Unexpected conditions that don't prevent operation. Alerts for potential issues.
+- **error**: Errors that require attention but may allow continued operation.
 
 ## 📦 Installation
 

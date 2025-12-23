@@ -7,6 +7,19 @@ common_db: &common_db
   max_idle_connections: 5
   enable_foreign_keys: true
 
+# Optional: Logging configuration
+logging:
+  default_level: "info"       # default log level: "debug", "info", "warn", "error"
+  development: false          # enable development mode (stack traces, console encoder)
+  # Optional: Per-component log levels
+  component_levels:
+    downloader: "info"
+    log-fetcher: "info"
+    sync-manager: "info"
+    reorg-detector: "warn"
+    log-store: "info"
+    maintenance: "info"
+
 downloader:
   rpc_url: "https://mainnet.infura.io/v3/XXXX"
   chunk_size: 5000            # block range per eth_getLogs call
@@ -19,7 +32,7 @@ downloader:
     # Maximum database size in MB (0 = unlimited)
     max_db_size_mb: 1000
     # Maximum blocks to keep from the latest indexed block (0 = unlimited)
-    max_blocks: 10000
+    max_blocks: 1000000
   maintenance:
     enabled: true                   # enable maintenance tasks
     check_interval: "5m"            # run maintenance every 5 minutes

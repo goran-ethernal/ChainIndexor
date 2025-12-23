@@ -32,3 +32,7 @@ func MBToBytes(mb uint64) uint64 {
 func BytesToMB(bytes uint64) uint64 {
 	return bytes / bytesInMB
 }
+
+func ToLowerWithTrim(s string) string {
+	return strings.ToLower(strings.TrimSpace(s))
+}

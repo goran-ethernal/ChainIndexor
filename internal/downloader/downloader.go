@@ -8,6 +8,7 @@ import (
 	"sync"
 
 	"github.com/ethereum/go-ethereum/common"
+	internalcommon "github.com/goran-ethernal/ChainIndexor/internal/common"
 	"github.com/goran-ethernal/ChainIndexor/internal/db"
 	"github.com/goran-ethernal/ChainIndexor/internal/fetcher"
 	"github.com/goran-ethernal/ChainIndexor/internal/fetcher/store"
@@ -74,7 +75,7 @@ func New(
 		reorgDetector:          reorgDetector,
 		syncManager:            syncManager,
 		maintenanceCoordinator: maintenanceCoordinator,
-		log:                    log.WithComponent("downloader"),
+		log:                    log,
 		coordinator:            indexer.NewIndexerCoordinator(),
 		addresses:              make([]common.Address, 0),
 		topics:                 make([][]common.Hash, 0),
@@ -90,7 +91,7 @@ func New(
 // The downloader will use the indexer's EventsToIndex method to determine
 // which logs to fetch and forward.
 func (d *Downloader) RegisterIndexer(idx idx.Indexer) {
-	d.log.Infow("registering indexer", "indexer", fmt.Sprintf("%T", idx))
+	d.log.Infof("registering indexer: %s", fmt.Sprintf("%T", idx))
 
 	// Get the events this indexer wants
 	eventsToIndex := idx.EventsToIndex()
@@ -169,7 +170,7 @@ func (d *Downloader) getDownloaderStartBlock() uint64 {
 
 // Download starts the download process, streaming logs to registered indexers.
 // It continues until the context is cancelled or an error occurs.
-func (d *Downloader) Download(ctx context.Context) error {
+func (d *Downloader) Download(ctx context.Context, cfg config.Config) error {
 	d.log.Info("starting download process")
 
 	// Start maintenance coordinator if configured
@@ -202,16 +203,26 @@ func (d *Downloader) Download(ctx context.Context) error {
 	d.mu.RUnlock()
 
 	// Create LogStore using the sync manager's database connection
-	logStore := store.NewLogStore(d.syncManager.DB(), d.log, d.cfg.DB, d.cfg.RetentionPolicy, d.maintenanceCoordinator)
+	logStore := store.NewLogStore(
+		d.syncManager.DB(),
+		logger.NewComponentLoggerFromConfig(internalcommon.ComponentLogStore, cfg.Logging),
+		d.cfg.DB,
+		d.cfg.RetentionPolicy,
+		d.maintenanceCoordinator,
+	)
 
-	d.logFetcher = fetcher.NewLogFetcher(fetcher.LogFetcherConfig{
-		ChunkSize:          d.cfg.ChunkSize,
-		Finality:           finality,
-		FinalizedLag:       d.cfg.FinalizedLag,
-		Addresses:          addresses,
-		Topics:             topics,
-		AddressStartBlocks: addressStartBlocks,
-	}, d.log, d.rpc, d.reorgDetector, logStore)
+	d.logFetcher = fetcher.NewLogFetcher(
+		fetcher.LogFetcherConfig{
+			ChunkSize:          d.cfg.ChunkSize,
+			Finality:           finality,
+			FinalizedLag:       d.cfg.FinalizedLag,
+			Addresses:          addresses,
+			Topics:             topics,
+			AddressStartBlocks: addressStartBlocks,
+		},
+		logger.NewComponentLoggerFromConfig(internalcommon.ComponentLogFetcher, cfg.Logging),
+		d.rpc, d.reorgDetector, logStore,
+	)
 
 	// Get current sync state
 	state, err := d.syncManager.GetState()
@@ -227,9 +238,9 @@ func (d *Downloader) Download(ctx context.Context) error {
 			lastIndexedBlock = downloaderStartBlock - 1
 		}
 
-		d.log.Infow("starting fresh download", "start_block", lastIndexedBlock)
+		d.log.Infof("starting fresh download from block %d", lastIndexedBlock)
 	} else {
-		d.log.Infow("resuming download", "last_indexed_block", lastIndexedBlock)
+		d.log.Infof("resuming download from block %d", lastIndexedBlock)
 	}
 
 	d.logFetcher.SetMode(fch.ModeBackfill) // Always start in backfill mode
@@ -249,9 +260,9 @@ func (d *Downloader) Download(ctx context.Context) error {
 			// Check if this is a reorg error
 			var reorgErr *reorg.ReorgDetectedError
 			if errors.As(err, &reorgErr) {
-				d.log.Warnw("reorg detected, initiating rollback",
-					"block", reorgErr.FirstReorgBlock,
-					"details", reorgErr.Details,
+				d.log.Warnf("reorg detected, initiating rollback: block=%d, details=%s",
+					reorgErr.FirstReorgBlock,
+					reorgErr.Details,
 				)
 				if err := d.handleReorg(reorgErr.FirstReorgBlock); err != nil {
 					return fmt.Errorf("failed to handle reorg: %w", err)
@@ -266,16 +277,16 @@ func (d *Downloader) Download(ctx context.Context) error {
 			}
 
 			// Not a reorg error, it's a real failure
-			d.log.Errorw("failed to fetch logs", "error", err, "last_block", lastIndexedBlock)
+			d.log.Errorf("failed to fetch logs: %v, last_block: %d", err, lastIndexedBlock)
 			return fmt.Errorf("failed to fetch logs: %w", err)
 		}
 
 		// Route logs to indexers
 		if len(result.Logs) > 0 {
-			d.log.Debugw("processing logs",
-				"count", len(result.Logs),
-				"from_block", result.FromBlock,
-				"to_block", result.ToBlock,
+			d.log.Debugf("processing logs: count=%d, from_block=%d, to_block=%d",
+				len(result.Logs),
+				result.FromBlock,
+				result.ToBlock,
 			)
 
 			if err := d.coordinator.HandleLogs(result.Logs); err != nil {
@@ -303,12 +314,12 @@ func (d *Downloader) Download(ctx context.Context) error {
 
 			lastIndexedBlock = result.ToBlock
 
-			d.log.Infow("checkpoint saved",
-				"from_block", result.FromBlock,
-				"to_block", lastIndexedBlock,
-				"to_block_hash", blockHash.Hex(),
-				"mode", d.logFetcher.GetMode(),
-				"logs_processed", len(result.Logs),
+			d.log.Infof("checkpoint saved: from_block=%d, to_block=%d, to_block_hash=%s, mode=%s, logs_processed=%d",
+				result.FromBlock,
+				lastIndexedBlock,
+				blockHash.Hex(),
+				d.logFetcher.GetMode(),
+				len(result.Logs),
 			)
 		}
 
@@ -323,7 +334,7 @@ func (d *Downloader) Download(ctx context.Context) error {
 // handleReorg handles a blockchain reorganization by rolling back indexers
 // and adjusting the sync state.
 func (d *Downloader) handleReorg(firstReorgBlock uint64) error {
-	d.log.Warnw("handling reorg", "first_reorg_block", firstReorgBlock)
+	d.log.Warnf("handling reorg: first_reorg_block=%d", firstReorgBlock)
 
 	// Notify all indexers to roll back
 	if err := d.coordinator.HandleReorg(firstReorgBlock); err != nil {
@@ -343,7 +354,7 @@ func (d *Downloader) handleReorg(firstReorgBlock uint64) error {
 
 	d.logFetcher.SetMode(fch.ModeBackfill)
 
-	d.log.Infow("reorg handled, resuming from safe block", "block", rollbackTo)
+	d.log.Infof("reorg handled, resuming from safe block %d", rollbackTo)
 
 	return nil
 }
@@ -354,19 +365,19 @@ func (d *Downloader) Close() error {
 
 	if d.syncManager != nil {
 		if err := d.syncManager.Close(); err != nil {
-			d.log.Errorw("failed to close sync manager", "error", err)
+			d.log.Errorf("failed to close sync manager: %v", err)
 		}
 	}
 
 	if d.reorgDetector != nil {
 		if err := d.reorgDetector.Close(); err != nil {
-			d.log.Errorw("failed to close reorg detector", "error", err)
+			d.log.Errorf("failed to close reorg detector: %v", err)
 		}
 	}
 
 	if d.maintenanceCoordinator != nil {
 		if err := d.maintenanceCoordinator.Stop(); err != nil {
-			d.log.Errorw("failed to stop maintenance coordinator", "error", err)
+			d.log.Errorf("failed to stop maintenance coordinator: %v", err)
 		}
 	}
 

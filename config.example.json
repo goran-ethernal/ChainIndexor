@@ -1,4 +1,16 @@
 {
+  "logging": {
+    "default_level": "info",
+    "development": false,
+    "component_levels": {
+      "downloader": "info",
+      "log-fetcher": "info",
+      "sync-manager": "debug",
+      "reorg-detector": "warn",
+      "log-store": "info",
+      "maintenance": "info"
+    }
+  },
   "downloader": {
     "rpc_url": "https://mainnet.infura.io/v3/XXXX",
     "chunk_size": 5000,

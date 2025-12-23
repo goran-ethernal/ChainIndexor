@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/goran-ethernal/ChainIndexor/examples/indexers/erc20"
+	"github.com/goran-ethernal/ChainIndexor/internal/common"
 	"github.com/goran-ethernal/ChainIndexor/internal/config"
 	"github.com/goran-ethernal/ChainIndexor/internal/db"
 	"github.com/goran-ethernal/ChainIndexor/internal/downloader"
@@ -43,15 +44,27 @@ func TestRun(t *testing.T) {
 		t.Fatalf("failed to create database: %v", err)
 	}
 
-	dbMaintainance := db.NewMaintenanceCoordinator(cfg.Downloader.DB.Path, database,
-		cfg.Downloader.Maintenance, logger.GetDefaultLogger())
+	dbMaintainance := db.NewMaintenanceCoordinator(
+		cfg.Downloader.DB.Path,
+		database,
+		cfg.Downloader.Maintenance,
+		logger.NewComponentLoggerFromConfig(common.ComponentMaintenance, cfg.Logging),
+	)
 
-	reorgDetector, err := reorg.NewReorgDetector(database, ethClient, logger.GetDefaultLogger(), dbMaintainance)
+	reorgDetector, err := reorg.NewReorgDetector(
+		database, ethClient,
+		logger.NewComponentLoggerFromConfig(common.ComponentReorgDetector, cfg.Logging),
+		dbMaintainance,
+	)
 	if err != nil {
 		t.Fatalf("failed to create reorg detector: %v", err)
 	}
 
-	syncManager, err := downloader.NewSyncManager(database, logger.GetDefaultLogger(), dbMaintainance)
+	syncManager, err := downloader.NewSyncManager(
+		database,
+		logger.NewComponentLoggerFromConfig(common.ComponentSyncManager, cfg.Logging),
+		dbMaintainance,
+	)
 	if err != nil {
 		t.Fatalf("failed to create sync manager: %v", err)
 	}
@@ -62,7 +75,7 @@ func TestRun(t *testing.T) {
 		reorgDetector,
 		syncManager,
 		dbMaintainance,
-		logger.GetDefaultLogger(),
+		logger.NewComponentLoggerFromConfig(common.ComponentDownloader, cfg.Logging),
 	)
 	if err != nil {
 		t.Fatalf("failed to create downloader: %v", err)
@@ -80,7 +93,7 @@ func TestRun(t *testing.T) {
 
 	errCh := make(chan error, 1)
 	go func() {
-		errCh <- downloader.Download(context)
+		errCh <- downloader.Download(context, *cfg)
 	}()
 
 	select {

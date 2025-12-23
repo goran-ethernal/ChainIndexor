@@ -68,14 +68,14 @@ func NewLogFetcher(
 		rpc:           rpcClient,
 		reorgDetector: reorgDetector,
 		logStore:      logStore,
-		log:           log.WithComponent("log-fetcher"),
+		log:           log,
 		mode:          fetcher.ModeBackfill,
 	}
 }
 
 // SetMode changes the fetcher's operating mode.
 func (lf *LogFetcher) SetMode(mode fetcher.FetchMode) {
-	lf.log.Infow("switching fetch mode", "from", lf.mode, "to", mode)
+	lf.log.Infof("switching fetch mode from %v to %v", lf.mode, mode)
 	lf.mode = mode
 }
 
@@ -96,10 +96,8 @@ func (lf *LogFetcher) fetchRange(
 	addresses []ethcommon.Address,
 	topics [][]ethcommon.Hash,
 ) (*fetcher.FetchResult, error) {
-	lf.log.Debugw("fetching range",
-		"from_block", fromBlock,
-		"to_block", toBlock,
-		"mode", lf.mode,
+	lf.log.Debugf("fetching range from %d to %d in mode %v",
+		fromBlock, toBlock, lf.mode,
 	)
 
 	// Build dynamic filter with only addresses that have reached their start block
@@ -131,20 +129,19 @@ func (lf *LogFetcher) fetchRange(
 			return nil, fmt.Errorf("failed to fetch logs: %w", err)
 		}
 
-		lf.log.Debugw("fetched logs",
-			"from_block", fromBlock,
-			"to_block", toBlock,
-			"active_addresses", len(activeAddresses),
-			"total_addresses", len(lf.cfg.Addresses),
-			"logs_count", len(logs),
+		lf.log.Debugf("fetched logs from %d to %d with %d active addresses (total %d addresses), logs count: %d",
+			fromBlock,
+			toBlock,
+			len(activeAddresses),
+			len(lf.cfg.Addresses),
+			len(logs),
 		)
 	} else {
 		// No active addresses yet - return empty logs
 		logs = []types.Log{}
-		lf.log.Debugw("skipped log fetch - no active addresses yet",
-			"from_block", fromBlock,
-			"to_block", toBlock,
-			"total_addresses", len(lf.cfg.Addresses),
+		lf.log.Debugf("skipped log fetch %d to %d - no active addresses yet",
+			fromBlock,
+			toBlock,
 		)
 	}
 
@@ -162,22 +159,22 @@ func (lf *LogFetcher) fetchRange(
 		// If reorg detected, invalidate cache
 		var reorgErr *reorg.ReorgDetectedError
 		if errors.As(err, &reorgErr) {
-			lf.log.Warnw("reorg detected, invalidating cache",
-				"from_block", reorgErr.FirstReorgBlock,
+			lf.log.Warnf("reorg detected, invalidating cache from block %d",
+				reorgErr.FirstReorgBlock,
 			)
 			if storeErr := lf.logStore.HandleReorg(ctx, reorgErr.FirstReorgBlock); storeErr != nil {
-				lf.log.Errorw("failed to handle reorg in log store",
-					"error", storeErr,
+				lf.log.Errorf("failed to handle reorg in log store: %v",
+					storeErr,
 				)
 			}
 		}
 		return nil, fmt.Errorf("reorg detected: %w", err)
 	}
 
-	lf.log.Infow("fetched range",
-		"from_block", fromBlock,
-		"to_block", toBlock,
-		"logs_count", len(logs),
+	lf.log.Infof("fetched range from %d to %d with %d logs",
+		fromBlock,
+		toBlock,
+		len(logs),
 	)
 
 	return &fetcher.FetchResult{
@@ -267,9 +264,9 @@ func (lf *LogFetcher) fetchLive(ctx context.Context, lastIndexedBlock uint64) (*
 
 	// If we're caught up, wait for new blocks
 	if fromBlock > finalizedBlockNum {
-		lf.log.Debugw("waiting for new blocks",
-			"last_indexed", lastIndexedBlock,
-			"finalized", finalizedBlock,
+		lf.log.Debugf("waiting for new blocks, last indexed: %d, finalized: %d",
+			lastIndexedBlock,
+			finalizedBlockNum,
 		)
 
 		// Wait for a short period before checking again
@@ -350,11 +347,11 @@ func (lf *LogFetcher) fetchLogsWithRetry(
 		// Try to parse suggested block range from error message
 		var newFrom, newTo uint64
 		if suggestedFrom, suggestedTo, ok := irpc.ParseSuggestedBlockRange(errData); ok {
-			lf.log.Infow("too many logs, retrying with suggested block range",
-				"original_from", fromBlock,
-				"original_to", toBlock,
-				"suggested_from", suggestedFrom,
-				"suggested_to", suggestedTo,
+			lf.log.Infof("too many logs, retrying with suggested block range from %d to %d (original range %d to %d)",
+				suggestedFrom,
+				suggestedTo,
+				fromBlock,
+				toBlock,
 			)
 			newFrom, newTo = suggestedFrom, suggestedTo
 		} else {
@@ -362,10 +359,12 @@ func (lf *LogFetcher) fetchLogsWithRetry(
 			const splitBy = 2
 			mid := (fromBlock + toBlock) / splitBy
 
-			lf.log.Infow("too many logs, retrying with smaller block range (by splitting in half)",
-				"original_from", fromBlock,
-				"original_to", toBlock,
-				"mid", mid,
+			lf.log.Infof("too many logs, retrying with smaller block range (by splitting in half) from %d to %d "+
+				"(original range %d to %d)",
+				fromBlock,
+				mid,
+				fromBlock,
+				toBlock,
 			)
 
 			if mid == fromBlock {
