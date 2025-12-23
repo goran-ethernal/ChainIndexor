@@ -277,7 +277,7 @@ func (d *Downloader) Download(ctx context.Context, cfg config.Config) error {
 			}
 
 			// Not a reorg error, it's a real failure
-			d.log.Errorf("failed to fetch logs: %w, last_block: %d", err, lastIndexedBlock)
+			d.log.Errorf("failed to fetch logs: %v, last_block: %d", err, lastIndexedBlock)
 			return fmt.Errorf("failed to fetch logs: %w", err)
 		}
 
@@ -365,19 +365,19 @@ func (d *Downloader) Close() error {
 
 	if d.syncManager != nil {
 		if err := d.syncManager.Close(); err != nil {
-			d.log.Errorf("failed to close sync manager: %w", err)
+			d.log.Errorf("failed to close sync manager: %v", err)
 		}
 	}
 
 	if d.reorgDetector != nil {
 		if err := d.reorgDetector.Close(); err != nil {
-			d.log.Errorf("failed to close reorg detector: %w", err)
+			d.log.Errorf("failed to close reorg detector: %v", err)
 		}
 	}
 
 	if d.maintenanceCoordinator != nil {
 		if err := d.maintenanceCoordinator.Stop(); err != nil {
-			d.log.Errorf("failed to stop maintenance coordinator: %w", err)
+			d.log.Errorf("failed to stop maintenance coordinator: %v", err)
 		}
 	}
 

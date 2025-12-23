@@ -139,10 +139,9 @@ func (lf *LogFetcher) fetchRange(
 	} else {
 		// No active addresses yet - return empty logs
 		logs = []types.Log{}
-		lf.log.Debugf("skipped log fetch - no active addresses yet",
+		lf.log.Debugf("skipped log fetch %d to %d - no active addresses yet",
 			fromBlock,
 			toBlock,
-			len(lf.cfg.Addresses),
 		)
 	}
 
@@ -360,7 +359,7 @@ func (lf *LogFetcher) fetchLogsWithRetry(
 			const splitBy = 2
 			mid := (fromBlock + toBlock) / splitBy
 
-			lf.log.Infof("too many logs, retrying with smaller block range (by splitting in half) from %d to %d"+
+			lf.log.Infof("too many logs, retrying with smaller block range (by splitting in half) from %d to %d "+
 				"(original range %d to %d)",
 				fromBlock,
 				mid,
