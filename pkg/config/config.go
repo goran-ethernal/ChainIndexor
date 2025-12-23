@@ -3,6 +3,9 @@ package config
 import (
 	"fmt"
 	"time"
+
+	"github.com/goran-ethernal/ChainIndexor/internal/common"
+	"github.com/goran-ethernal/ChainIndexor/internal/logger"
 )
 
 // Config represents the complete configuration for the ChainIndexor.
@@ -12,6 +15,9 @@ type Config struct {
 
 	// Indexers contains the configuration for all indexers
 	Indexers []IndexerConfig `yaml:"indexers" json:"indexers" toml:"indexers"`
+
+	// Logging contains logging configuration
+	Logging *LoggingConfig `yaml:"logging,omitempty" json:"logging,omitempty" toml:"logging,omitempty"`
 }
 
 // DownloaderConfig represents the configuration for the downloader.
@@ -183,6 +189,81 @@ func (m *MaintenanceConfig) ParsedCheckInterval() (time.Duration, error) {
 	return time.ParseDuration(m.CheckInterval)
 }
 
+// LoggingConfig configures logging behavior with per-component log levels.
+type LoggingConfig struct {
+	// DefaultLevel is the default log level for all components
+	// Options: "debug", "info", "warn", "error"
+	DefaultLevel string `yaml:"default_level" json:"default_level" toml:"default_level"`
+
+	// Development enables development mode (stack traces, console encoder)
+	Development bool `yaml:"development" json:"development" toml:"development"`
+
+	// ComponentLevels sets log levels for specific components
+	// Available components:
+	//   - downloader: Main downloader orchestration
+	//   - log-fetcher: Blockchain log fetching
+	//   - sync-manager: Sync state management
+	//   - reorg-detector: Reorganization detection
+	//   - log-store: Log storage layer
+	//   - maintenance: Database maintenance
+	//   - indexer-coordinator: Indexer coordination
+	ComponentLevels map[string]string `yaml:"component_levels,omitempty" json:"component_levels,omitempty" toml:"component_levels,omitempty"` //nolint:lll
+}
+
+// ApplyDefaults sets default values for optional logging configuration fields.
+func (l *LoggingConfig) ApplyDefaults() {
+	if l.DefaultLevel == "" {
+		l.DefaultLevel = "info"
+	}
+	// Development defaults to false (zero value)
+	if l.ComponentLevels == nil {
+		l.ComponentLevels = make(map[string]string)
+	}
+}
+
+// Validate checks if the logging configuration is valid.
+func (l *LoggingConfig) Validate() error {
+	// Validate default level
+	if l.DefaultLevel != "" {
+		if _, valid := logger.ValidLogLevels[common.ToLowerWithTrim(l.DefaultLevel)]; !valid {
+			return fmt.Errorf("logging.default_level: must be one of: debug, info, warn, error")
+		}
+	}
+
+	for component, level := range l.ComponentLevels {
+		// Check if component is valid
+		if _, validComponent := common.AllComponents[common.ToLowerWithTrim(component)]; !validComponent {
+			return fmt.Errorf("logging.component_levels: unknown component '%s'", component)
+		}
+
+		// Check if level is valid
+		if _, valid := logger.ValidLogLevels[common.ToLowerWithTrim(level)]; !valid {
+			return fmt.Errorf("logging.component_levels[%s]: must be one of: debug, info, warn, error", component)
+		}
+	}
+
+	return nil
+}
+
+// GetComponentLevel returns the log level for a specific component.
+// Falls back to DefaultLevel if no component-specific level is set.
+func (l *LoggingConfig) GetComponentLevel(component string) string {
+	if level, ok := l.ComponentLevels[component]; ok {
+		return level
+	}
+	return common.ToLowerWithTrim(l.DefaultLevel)
+}
+
+// GetDefaultLevel returns the default log level.
+func (l *LoggingConfig) GetDefaultLevel() string {
+	return common.ToLowerWithTrim(l.DefaultLevel)
+}
+
+// IsDevelopment returns whether development mode is enabled.
+func (l *LoggingConfig) IsDevelopment() bool {
+	return l.Development
+}
+
 // IndexerConfig represents the configuration for a single indexer.
 type IndexerConfig struct {
 	// Name is a unique identifier for this indexer
@@ -223,6 +304,11 @@ func (c *Config) ApplyDefaults() {
 	for i := range c.Indexers {
 		c.Indexers[i].ApplyDefaults()
 	}
+
+	// Apply logging defaults
+	if c.Logging != nil {
+		c.Logging.ApplyDefaults()
+	}
 }
 
 // Validate checks if the configuration is valid.
@@ -255,6 +341,13 @@ func (c *Config) Validate() error {
 	if c.Downloader.Maintenance != nil {
 		if err := c.Downloader.Maintenance.Validate(); err != nil {
 			return fmt.Errorf("downloader.maintenance: %w", err)
+		}
+	}
+
+	// Validate logging configuration
+	if c.Logging != nil {
+		if err := c.Logging.Validate(); err != nil {
+			return err
 		}
 	}
 

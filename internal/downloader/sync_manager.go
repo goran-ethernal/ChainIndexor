@@ -70,10 +70,10 @@ func (sm *SyncManager) GetState() (*SyncState, error) {
 		return nil, fmt.Errorf("failed to get sync state: %w", err)
 	}
 
-	sm.log.Debugw("retrieved sync state",
-		"last_block", state.LastIndexedBlock,
-		"last_block_hash", state.LastIndexedBlockHash,
-		"mode", state.Mode,
+	sm.log.Debugf("retrieved sync state: last_block=%d, last_block_hash=%s, mode=%s",
+		state.LastIndexedBlock,
+		state.LastIndexedBlockHash.Hex(),
+		state.Mode,
 	)
 
 	return &state, nil
@@ -100,11 +100,11 @@ func (sm *SyncManager) SaveCheckpoint(blockNum uint64, blockHash common.Hash, mo
 		return fmt.Errorf("failed to save checkpoint: %w", err)
 	}
 
-	sm.log.Debugw("saved checkpoint",
-		"block", blockNum,
-		"block_hash", blockHash.Hex(),
-		"mode", mode,
-		"timestamp", state.LastIndexedTimestamp,
+	sm.log.Debugf("saved checkpoint: block=%d, block_hash=%s, mode=%s, timestamp=%d",
+		blockNum,
+		blockHash.Hex(),
+		mode,
+		state.LastIndexedTimestamp,
 	)
 
 	return nil
@@ -132,7 +132,7 @@ func (sm *SyncManager) SetMode(mode fetcher.FetchMode) error {
 		return fmt.Errorf("failed to set mode: %w", err)
 	}
 
-	sm.log.Infow("sync mode updated", "mode", mode)
+	sm.log.Infof("sync mode updated: mode=%s", mode)
 
 	return nil
 }
@@ -159,9 +159,9 @@ func (sm *SyncManager) Reset(startBlock uint64) error {
 		return fmt.Errorf("failed to reset sync state: %w", err)
 	}
 
-	sm.log.Warnw("sync state reset",
-		"start_block", startBlock,
-		"mode", fetcher.ModeBackfill,
+	sm.log.Warnf("sync state reset: start_block=%d, mode=%s",
+		startBlock,
+		fetcher.ModeBackfill,
 	)
 
 	return nil

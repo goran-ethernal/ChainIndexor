@@ -35,7 +35,7 @@ func NewReorgDetector(
 	detector := &ReorgDetector{
 		db:                     db,
 		rpc:                    rpcClient,
-		log:                    log.WithComponent("reorg-detector"),
+		log:                    log,
 		maintenanceCoordinator: maintenanceCoordinator,
 	}
 
@@ -58,10 +58,10 @@ func (r *ReorgDetector) VerifyAndRecordBlocks(
 	unlock := r.maintenanceCoordinator.AcquireOperationLock()
 	defer unlock()
 
-	r.log.Debugw("verifying and recording blocks",
-		"num_logs", len(logs),
-		"from_block", fromBlock,
-		"to_block", toBlock,
+	r.log.Debugf("verifying and recording blocks: num_logs=%d from_block=%d to_block=%d",
+		len(logs),
+		fromBlock,
+		toBlock,
 	)
 
 	// Begin transaction for atomic operations
@@ -71,7 +71,7 @@ func (r *ReorgDetector) VerifyAndRecordBlocks(
 	}
 	defer func() {
 		if err := tx.Rollback(); err != nil && !errors.Is(err, sql.ErrTxDone) {
-			r.log.Errorw("failed to rollback transaction", "error", err)
+			r.log.Errorf("failed to rollback transaction: %v", err)
 		}
 	}()
 
@@ -93,7 +93,7 @@ func (r *ReorgDetector) VerifyAndRecordBlocks(
 		if err := r.pruneOldBlocksTx(tx, finalizedBlockNum+1); err != nil {
 			return nil, fmt.Errorf("failed to prune finalized blocks: %w", err)
 		}
-		r.log.Debugw("pruned finalized blocks", "finalized_block", finalizedBlockNum)
+		r.log.Debugf("pruned finalized blocks: finalized_block=%d", finalizedBlockNum)
 	}
 
 	// Step 2: Verify all non-finalized blocks in DB against current chain state
@@ -103,7 +103,7 @@ func (r *ReorgDetector) VerifyAndRecordBlocks(
 	}
 
 	if len(nonFinalizedBlocks) > 0 {
-		r.log.Debugw("verifying non-finalized blocks", "count", len(nonFinalizedBlocks))
+		r.log.Debugf("verifying non-finalized blocks: count=%d", len(nonFinalizedBlocks))
 
 		// Get block numbers to fetch
 		blockNums := make([]uint64, len(nonFinalizedBlocks))
@@ -124,17 +124,17 @@ func (r *ReorgDetector) VerifyAndRecordBlocks(
 
 			if cachedHash != currentHash {
 				// REORG DETECTED!
-				r.log.Warnw("reorg detected in non-finalized blocks",
-					"block", header.Number.Uint64(),
-					"cached_hash", cachedHash.Hex(),
-					"current_hash", currentHash.Hex(),
+				r.log.Warnf("reorg detected in non-finalized blocks: block=%d cached_hash=%s current_hash=%s",
+					header.Number.Uint64(),
+					cachedHash.Hex(),
+					currentHash.Hex(),
 				)
 				return nil, reorg.NewReorgError(header.Number.Uint64(),
 					fmt.Sprintf("cached_hash=%s current_hash=%s", cachedHash.Hex(), currentHash.Hex()))
 			}
 		}
 
-		r.log.Debugw("non-finalized blocks verified", "count", len(nonFinalizedBlocks))
+		r.log.Debugf("non-finalized blocks verified: count=%d", len(nonFinalizedBlocks))
 	}
 
 	// Step 3: Fetch headers for the new block range
@@ -171,10 +171,10 @@ func (r *ReorgDetector) VerifyAndRecordBlocks(
 		if logHash, exists := logBlockHashes[blockNum]; exists {
 			if logHash != headerHash {
 				// INCONSISTENCY! Reorg happened between the two RPC calls
-				r.log.Warnw("reorg detected during fetch",
-					"block", blockNum,
-					"log_hash", logHash.Hex(),
-					"header_hash", headerHash.Hex(),
+				r.log.Warnf("reorg detected during fetch: block=%d log_hash=%s header_hash=%s",
+					blockNum,
+					logHash.Hex(),
+					headerHash.Hex(),
 				)
 				return nil, reorg.NewReorgError(blockNum,
 					fmt.Sprintf("log_hash=%s header_hash=%s", logHash.Hex(), headerHash.Hex()))
@@ -189,11 +189,11 @@ func (r *ReorgDetector) VerifyAndRecordBlocks(
 			actualParent := headers[i].ParentHash
 
 			if actualParent != expectedParent {
-				r.log.Warnw("chain discontinuity detected",
-					"block", headers[i].Number.Uint64(),
-					"prev_block", headers[i-1].Number.Uint64(),
-					"expected_parent", expectedParent.Hex(),
-					"actual_parent", actualParent.Hex(),
+				r.log.Warnf("chain discontinuity detected: block=%d prev_block=%d expected_parent=%s actual_parent=%s",
+					headers[i].Number.Uint64(),
+					headers[i-1].Number.Uint64(),
+					expectedParent.Hex(),
+					actualParent.Hex(),
 				)
 				return nil, reorg.NewReorgError(headers[i].Number.Uint64(),
 					fmt.Sprintf("chain discontinuity between blocks %d and %d",
@@ -213,10 +213,10 @@ func (r *ReorgDetector) VerifyAndRecordBlocks(
 	}
 
 	if len(headers) > 0 {
-		r.log.Debugw("recorded block hashes",
-			"from_block", headers[0].Number.Uint64(),
-			"to_block", headers[len(headers)-1].Number.Uint64(),
-			"count", len(headers),
+		r.log.Debugf("recorded block hashes: from_block=%d to_block=%d count=%d",
+			headers[0].Number.Uint64(),
+			headers[len(headers)-1].Number.Uint64(),
+			len(headers),
 		)
 	}
 
@@ -283,9 +283,9 @@ func (r *ReorgDetector) pruneOldBlocksTx(tx *sql.Tx, keepFromBlock uint64) error
 
 	rowsAffected, _ := result.RowsAffected()
 	if rowsAffected > 0 {
-		r.log.Debugw("pruned old block hashes in transaction",
-			"keep_from_block", keepFromBlock,
-			"deleted_count", rowsAffected,
+		r.log.Debugf("pruned old block hashes in transaction: keep_from_block=%d deleted_count=%d",
+			keepFromBlock,
+			rowsAffected,
 		)
 	}
 
