@@ -276,7 +276,6 @@ ChainIndexor provides structured logging with per-component log level configurat
 | `reorg-detector` | Blockchain reorganization detection |
 | `log-store` | Log storage layer and database operations |
 | `maintenance` | Database maintenance operations (WAL checkpoint, VACUUM) |
-| `indexer-coordinator` | Indexer routing and event distribution |
 
 ### Configuration Examples
 
@@ -301,7 +300,6 @@ logging:
     reorg-detector: "warn"    # only warnings and errors
     log-store: "info"
     maintenance: "debug"      # detailed maintenance logs
-    indexer-coordinator: "info"
 ```
 
 #### Development Mode
