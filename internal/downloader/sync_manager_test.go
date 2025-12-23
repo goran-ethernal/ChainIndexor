@@ -48,7 +48,7 @@ func TestSyncManager(t *testing.T) {
 	require.NoError(t, err)
 
 	// Create SyncManager
-	sm, err := NewSyncManager(tmpDB, log)
+	sm, err := NewSyncManager(tmpDB, log, &db.NoOpMaintenance{})
 	require.NoError(t, err)
 	defer sm.Close()
 
@@ -120,7 +120,7 @@ func TestSyncManagerPersistence(t *testing.T) {
 	require.NoError(t, err)
 
 	// Create SyncManager and save a checkpoint
-	sm, err := NewSyncManager(tmpDB, log)
+	sm, err := NewSyncManager(tmpDB, log, &db.NoOpMaintenance{})
 	require.NoError(t, err)
 
 	persistHash := common.HexToHash("0x123abc")
@@ -128,7 +128,7 @@ func TestSyncManagerPersistence(t *testing.T) {
 	require.NoError(t, err)
 
 	// Create a new SyncManager with the same database
-	sm2, err := NewSyncManager(tmpDB, log)
+	sm2, err := NewSyncManager(tmpDB, log, &db.NoOpMaintenance{})
 	require.NoError(t, err)
 
 	// Verify the checkpoint was persisted

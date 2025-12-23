@@ -14,6 +14,16 @@ max_open_connections = 25
 max_idle_connections = 5
 enable_foreign_keys = true
 
+[downloader.retention_policy]
+max_db_size_mb = 1000
+max_blocks = 10000
+
+[downloader.maintenance]
+enabled = true
+check_interval = "5m"
+vacuum_on_startup = true
+wal_checkpoint_mode = "TRUNCATE"
+
 [[indexers]]
 name = "MyTokenIndexer"
 start_block = 17000000

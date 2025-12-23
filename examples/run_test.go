@@ -43,12 +43,15 @@ func TestRun(t *testing.T) {
 		t.Fatalf("failed to create database: %v", err)
 	}
 
-	reorgDetector, err := reorg.NewReorgDetector(database, ethClient, logger.GetDefaultLogger())
+	dbMaintainance := db.NewMaintenanceCoordinator(cfg.Downloader.DB.Path, database,
+		cfg.Downloader.Maintenance, logger.GetDefaultLogger())
+
+	reorgDetector, err := reorg.NewReorgDetector(database, ethClient, logger.GetDefaultLogger(), dbMaintainance)
 	if err != nil {
 		t.Fatalf("failed to create reorg detector: %v", err)
 	}
 
-	syncManager, err := downloader.NewSyncManager(database, logger.GetDefaultLogger())
+	syncManager, err := downloader.NewSyncManager(database, logger.GetDefaultLogger(), dbMaintainance)
 	if err != nil {
 		t.Fatalf("failed to create sync manager: %v", err)
 	}
@@ -58,6 +61,7 @@ func TestRun(t *testing.T) {
 		ethClient,
 		reorgDetector,
 		syncManager,
+		dbMaintainance,
 		logger.GetDefaultLogger(),
 	)
 	if err != nil {
@@ -84,7 +88,8 @@ func TestRun(t *testing.T) {
 		if err != nil {
 			t.Fatalf("downloader failed: %v", err)
 		}
-	case <-time.After(1 * time.Hour):
+	case <-time.After(1 * time.Hour): // change to desired run time
 		cancel()
+		downloader.Close()
 	}
 }

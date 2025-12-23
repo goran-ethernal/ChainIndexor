@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"github.com/goran-ethernal/ChainIndexor/pkg/config"
 	_ "github.com/mattn/go-sqlite3"
@@ -88,55 +87,4 @@ func DBTotalSize(dbPath string) (int64, error) {
 	}
 
 	return total, nil
-}
-
-func Vacuum(db *sql.DB) error {
-	isWALMode, err := isWALMode(db)
-	if err != nil {
-		return fmt.Errorf("failed to check journal mode: %w", err)
-	}
-
-	// If in WAL mode, use checkpoint to reclaim space
-	if isWALMode {
-		return vacuumWAL(db)
-	}
-
-	// For non-WAL modes (DELETE, TRUNCATE, PERSIST), VACUUM also requires exclusive access
-	// Attempt VACUUM - this may fail if other connections are active
-	_, err = db.Exec(`VACUUM;`)
-	if err != nil {
-		// If locked, log warning but don't fail - this is expected in production
-		if strings.Contains(err.Error(), "database is locked") {
-			return fmt.Errorf("cannot vacuum: database is locked by other connections (run during maintenance window): %w", err)
-		}
-		return fmt.Errorf("failed to vacuum database: %w", err)
-	}
-
-	return nil
-}
-
-func vacuumWAL(db *sql.DB) error {
-	// In WAL mode with multiple active connections (sync manager, reorg detector, log store),
-	// switching journal modes requires exclusive access which will fail.
-	// Instead, use checkpoint to merge WAL and reclaim space without mode switching.
-	// This provides ~10-15% space reclamation, which is sufficient for production use.
-
-	// Use TRUNCATE checkpoint to merge WAL into main DB and remove/shrink WAL file
-	if _, err := db.Exec(`PRAGMA wal_checkpoint(TRUNCATE);`); err != nil {
-		return fmt.Errorf("failed to checkpoint WAL: %w", err)
-	}
-
-	// Note: We skip VACUUM because:
-	// 1. In production, sync manager, reorg detector, and log store all hold connections
-	// 2. Checkpoint alone provides adequate space reclamation for ongoing operations
-
-	return nil
-}
-
-func isWALMode(db *sql.DB) (bool, error) {
-	var mode string
-	if err := db.QueryRow(`PRAGMA journal_mode;`).Scan(&mode); err != nil {
-		return false, err
-	}
-	return strings.EqualFold(mode, "wal"), nil
 }

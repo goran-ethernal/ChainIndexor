@@ -8,6 +8,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/goran-ethernal/ChainIndexor/internal/db"
 	"github.com/goran-ethernal/ChainIndexor/internal/logger"
 	"github.com/goran-ethernal/ChainIndexor/pkg/reorg"
 	"github.com/goran-ethernal/ChainIndexor/pkg/rpc"
@@ -18,10 +19,10 @@ var _ reorg.Detector = (*ReorgDetector)(nil)
 
 // ReorgDetector detects blockchain reorganizations by tracking block hashes.
 type ReorgDetector struct {
-	db  *sql.DB
-	log *logger.Logger
-
-	rpc rpc.EthClient
+	db                     *sql.DB
+	log                    *logger.Logger
+	rpc                    rpc.EthClient
+	maintenanceCoordinator db.Maintenance
 }
 
 // NewReorgDetector creates a new ReorgDetector with the given database configuration.
@@ -29,11 +30,13 @@ func NewReorgDetector(
 	db *sql.DB,
 	rpcClient rpc.EthClient,
 	log *logger.Logger,
+	maintenanceCoordinator db.Maintenance,
 ) (*ReorgDetector, error) {
 	detector := &ReorgDetector{
-		db:  db,
-		rpc: rpcClient,
-		log: log.WithComponent("reorg-detector"),
+		db:                     db,
+		rpc:                    rpcClient,
+		log:                    log.WithComponent("reorg-detector"),
+		maintenanceCoordinator: maintenanceCoordinator,
 	}
 
 	detector.log.Info("reorg detector initialized")
@@ -51,6 +54,10 @@ func NewReorgDetector(
 func (r *ReorgDetector) VerifyAndRecordBlocks(
 	ctx context.Context,
 	logs []types.Log, fromBlock, toBlock uint64) ([]*types.Header, error) {
+	// Acquire operation lock if maintenance coordinator is available
+	unlock := r.maintenanceCoordinator.AcquireOperationLock()
+	defer unlock()
+
 	r.log.Debugw("verifying and recording blocks",
 		"num_logs", len(logs),
 		"from_block", fromBlock,

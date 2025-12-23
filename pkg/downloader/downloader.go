@@ -16,4 +16,7 @@ type Downloader interface {
 	// Download starts the download process, streaming logs to registered indexers.
 	// It continues until the context is cancelled or an error occurs.
 	Download(ctx context.Context) error
+
+	// Close gracefully stops the downloader, ensuring all resources are cleaned up.
+	Close() error
 }

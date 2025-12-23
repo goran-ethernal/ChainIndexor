@@ -64,7 +64,7 @@ indexers:
 The downloader is responsible for fetching logs from the blockchain and coordinating indexers.
 
 | Parameter | Type | Required | Default | Description |
-|-----------|------|----------|---------|-------------|
+| ----------- | ------ | ---------- | --------- | ------------- |
 | `rpc_url` | string | Yes | - | Ethereum RPC endpoint URL (HTTP/HTTPS/WebSocket) |
 | `chunk_size` | uint64 | No | 5000 | Number of blocks to fetch per `eth_getLogs` call. Adjust based on RPC limits |
 | `finality` | string | No | "finalized" | Block finality mode: `"finalized"`, `"safe"`, or `"latest"` |
@@ -77,7 +77,7 @@ The downloader is responsible for fetching logs from the blockchain and coordina
 SQLite database settings for optimal performance:
 
 | Parameter | Type | Required | Default | Description |
-|-----------|------|----------|---------|-------------|
+| ----------- | ------ | ---------- | --------- | ------------- |
 | `path` | string | Yes | - | File path to the SQLite database |
 | `journal_mode` | string | No | "WAL" | SQLite journal mode: `"WAL"`, `"DELETE"`, `"TRUNCATE"`, `"PERSIST"`, `"MEMORY"`. WAL recommended for concurrency |
 | `synchronous` | string | No | "NORMAL" | Synchronization level: `"FULL"`, `"NORMAL"`, `"OFF"`. NORMAL balances safety and performance |
@@ -91,10 +91,10 @@ SQLite database settings for optimal performance:
 
 Optional configuration to automatically prune old logs and manage database size:
 
-| Parameter | Type | Required | Default | Description |
-|-----------|------|----------|---------|-------------|
-| `max_db_size_mb` | uint64 | No | 0 | Maximum database size in megabytes. `0` = unlimited. Triggers pruning when exceeded |
-| `max_blocks` | uint64 | No | 0 | Maximum number of blocks to retain from finalized block. `0` = keep all blocks |
+| Parameter         | Type   | Required | Default | Description                                                                                  |
+|-------------------|--------|----------|---------|----------------------------------------------------------------------------------------------|
+| `max_db_size_mb`  | uint64 | No       | 0       | Maximum database size in megabytes. `0` = unlimited. Triggers pruning when exceeded          |
+| `max_blocks`      | uint64 | No       | 0       | Maximum number of blocks to retain from finalized block. `0` = keep all blocks               |
 
 **How Retention Works:**
 
@@ -103,12 +103,43 @@ Optional configuration to automatically prune old logs and manage database size:
 - Both policies can be used together; the more aggressive threshold applies
 - Pruning runs automatically after log ingestion and includes WAL-aware vacuuming
 
+#### Maintenance Configuration
+
+Optional configuration for automated database maintenance tasks (WAL checkpoints and VACUUM operations):
+
+| Parameter | Type | Required | Default | Description |
+| ----------- | ------ | ---------- | --------- | ------------- |
+| `enabled` | bool | No | false | Enable background maintenance tasks |
+| `check_interval` | string | No | "30m" | How often to run maintenance (e.g., `"5m"`, `"30m"`, `"1h"`) |
+| `vacuum_on_startup` | bool | No | false | Run maintenance immediately on startup before indexing begins |
+| `wal_checkpoint_mode` | string | No | "TRUNCATE" | WAL checkpoint mode: `"PASSIVE"`, `"FULL"`, `"RESTART"`, `"TRUNCATE"` |
+
+**Maintenance Operations:**
+
+- **WAL Checkpoint**: Moves data from Write-Ahead Log (WAL) file back to main database file
+- **VACUUM**: Reclaims fragmented space and optimizes database structure
+- Both operations coordinate with active indexing operations to avoid conflicts
+
+**Checkpoint Modes:**
+
+- `PASSIVE`: Non-blocking, skips pages if busy (least aggressive)
+- `FULL`: Waits for transactions, checkpoints all pages
+- `RESTART`: Like FULL but also resets WAL file
+- `TRUNCATE`: Most aggressive - resets and truncates WAL file (recommended for production)
+
+**When to Enable:**
+
+- Essential for long-running indexers to prevent WAL file growth
+- Recommended for production deployments
+- Disable for short-lived or test environments
+- Works seamlessly with retention policies for optimal disk usage
+
 ### Indexer Configuration
 
 Configure one or more indexers to process specific events:
 
 | Parameter | Type | Required | Default | Description |
-|-----------|------|----------|---------|-------------|
+| ----------- | ------ | ---------- | --------- | ------------- |
 | `name` | string | Yes | - | Unique identifier for this indexer |
 | `start_block` | uint64 | No | 0 | Block number to start indexing from. `0` = genesis |
 | `db` | object | Yes | - | Database configuration for the indexer (same format as downloader db) |
@@ -118,10 +149,10 @@ Configure one or more indexers to process specific events:
 
 Each contract specifies which events to monitor:
 
-| Parameter | Type | Required | Default | Description |
-|-----------|------|----------|---------|-------------|
-| `address` | string | Yes | - | Ethereum contract address (hex format with `0x` prefix) |
-| `events` | array | Yes | - | List of event signatures to index |
+| Parameter   | Type   | Required | Default | Description                                                    |
+|-------------|--------|----------|---------|----------------------------------------------------------------|
+| `address`   | string | Yes      | -       | Ethereum contract address (hex format with `0x` prefix)        |
+| `events`    | array  | Yes      | -       | List of event signatures to index                              |
 
 **Event Signature Format:**
 
@@ -158,6 +189,11 @@ downloader:
   retention_policy:
     max_db_size_mb: 1000  # Keep database under 1GB
     max_blocks: 10000     # Retain last 10k blocks
+  maintenance:
+    enabled: true
+    check_interval: "30m"      # Run maintenance every 30 minutes
+    vacuum_on_startup: true    # Clean database on startup
+    wal_checkpoint_mode: "TRUNCATE"  # Aggressive WAL reclamation
 
 indexers:
   - name: "ERC20Indexer"
@@ -200,6 +236,9 @@ indexers:
 - Enable `retention_policy` to prevent unbounded database growth
 - Set reasonable `max_db_size_mb` based on available storage
 - Monitor `max_blocks` to balance data retention needs with performance
+- Enable `maintenance` with appropriate `check_interval` (e.g., `"30m"` or `"1h"`)
+- Use `wal_checkpoint_mode: "TRUNCATE"` for maximum space reclamation
+- Enable `vacuum_on_startup: true` for fresh starts after crashes
 
 **Development Settings:**
 
@@ -229,7 +268,7 @@ go build ./...
 - Use the ERC20 indexer as a template for custom event processing.
 - Register indexers in your config and main application.
 
-## 📝 Documentation
+## 📝 Documentation (WIP)
 
 - [Configuration Guide](docs/configuration.md)
 - [Writing Custom Indexers](docs/indexers.md)
