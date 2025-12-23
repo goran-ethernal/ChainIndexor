@@ -88,7 +88,7 @@ func TestRun(t *testing.T) {
 		if err != nil {
 			t.Fatalf("downloader failed: %v", err)
 		}
-	case <-time.After(1 * time.Hour):
+	case <-time.After(1 * time.Hour): // change to desired run time
 		cancel()
 		downloader.Close()
 	}
