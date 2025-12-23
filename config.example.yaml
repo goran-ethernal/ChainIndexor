@@ -46,6 +46,6 @@ indexers:
       <<: *common_db
       path: "./data/mytokenindexer.sqlite"
     contracts:
-      - address: "0x7b79995e5f793A07Bc00c21412e50Ecae098E7f9"
+      - address: "0x1234567890abcdef1234567890abcdef12345678"
         events:
           - "Transfer(address,address,uint256)"
