@@ -37,6 +37,10 @@ func (m *mockIndexer) StartBlock() uint64 {
 	return m.startBlock
 }
 
+func (m *mockIndexer) Name() string {
+	return "mockIndexer"
+}
+
 func TestDownloaderCreation(t *testing.T) {
 	log, err := logger.NewLogger("info", true)
 	require.NoError(t, err)

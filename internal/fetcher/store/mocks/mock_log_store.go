@@ -250,53 +250,6 @@ func (_c *LogStore_HandleReorg_Call) RunAndReturn(run func(context.Context, uint
 	return _c
 }
 
-// PruneLogsBeforeBlock provides a mock function with given fields: ctx, beforeBlock
-func (_m *LogStore) PruneLogsBeforeBlock(ctx context.Context, beforeBlock uint64) error {
-	ret := _m.Called(ctx, beforeBlock)
-
-	if len(ret) == 0 {
-		panic("no return value specified for PruneLogsBeforeBlock")
-	}
-
-	var r0 error
-	if rf, ok := ret.Get(0).(func(context.Context, uint64) error); ok {
-		r0 = rf(ctx, beforeBlock)
-	} else {
-		r0 = ret.Error(0)
-	}
-
-	return r0
-}
-
-// LogStore_PruneLogsBeforeBlock_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'PruneLogsBeforeBlock'
-type LogStore_PruneLogsBeforeBlock_Call struct {
-	*mock.Call
-}
-
-// PruneLogsBeforeBlock is a helper method to define mock.On call
-//   - ctx context.Context
-//   - beforeBlock uint64
-func (_e *LogStore_Expecter) PruneLogsBeforeBlock(ctx interface{}, beforeBlock interface{}) *LogStore_PruneLogsBeforeBlock_Call {
-	return &LogStore_PruneLogsBeforeBlock_Call{Call: _e.mock.On("PruneLogsBeforeBlock", ctx, beforeBlock)}
-}
-
-func (_c *LogStore_PruneLogsBeforeBlock_Call) Run(run func(ctx context.Context, beforeBlock uint64)) *LogStore_PruneLogsBeforeBlock_Call {
-	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context), args[1].(uint64))
-	})
-	return _c
-}
-
-func (_c *LogStore_PruneLogsBeforeBlock_Call) Return(_a0 error) *LogStore_PruneLogsBeforeBlock_Call {
-	_c.Call.Return(_a0)
-	return _c
-}
-
-func (_c *LogStore_PruneLogsBeforeBlock_Call) RunAndReturn(run func(context.Context, uint64) error) *LogStore_PruneLogsBeforeBlock_Call {
-	_c.Call.Return(run)
-	return _c
-}
-
 // StoreLogs provides a mock function with given fields: ctx, addresses, topics, logs, fromBlock, toBlock
 func (_m *LogStore) StoreLogs(ctx context.Context, addresses []common.Address, topics [][]common.Hash, logs []types.Log, fromBlock uint64, toBlock uint64) error {
 	ret := _m.Called(ctx, addresses, topics, logs, fromBlock, toBlock)

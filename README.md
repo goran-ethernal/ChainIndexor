@@ -23,6 +23,7 @@ ChainIndexor is designed to:
 - **Reorg Detection & Recovery**: Detects chain reorganizations and safely rolls back indexed data.
 - **Configurable Database Backend**: Uses SQLite with connection pooling, PRAGMA tuning, and schema migrations.
 - **Batch & Chunked Downloading**: Efficiently downloads logs in configurable block ranges.
+- **Prometheus Metrics**: Built-in metrics for monitoring indexing performance, RPC health, database operations, and system resources.
 - **Comprehensive Test Suite**: Includes unit and integration tests for all major components.
 - **Example Indexers**: Production-grade ERC20 token indexer included as a template.
 
@@ -57,6 +58,12 @@ downloader:
   
 indexers:
   # ... indexer settings
+
+metrics:
+  # ... metrics settings
+
+logging:
+  # ... logging settings
 ```
 
 ### Downloader Configuration
@@ -219,6 +226,11 @@ indexers:
       - address: "0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f"
         events:
           - "PairCreated(address,address,address,uint256)"
+
+metrics:
+  enabled: true
+  listen_address: ":9090"
+  path: "/metrics"
 ```
 
 ### Configuration Tips
@@ -253,6 +265,90 @@ indexers:
 - Each indexer gets its own database for isolation
 - Set appropriate `start_block` per indexer to avoid unnecessary syncing
 - Use descriptive names for easier monitoring and debugging
+
+## 📊 Metrics Configuration
+
+ChainIndexor includes comprehensive Prometheus metrics for monitoring and observability. Metrics cover indexing progress, RPC operations, database performance, maintenance tasks, reorg detection, and system health.
+
+### Metrics Parameters
+
+| Parameter | Type | Required | Default | Description |
+| ----------- | ------ | ---------- | --------- | ------------- |
+| `enabled` | bool | No | false | Enable Prometheus metrics collection and HTTP endpoint |
+| `listen_address` | string | No | ":9090" | Address and port for the metrics HTTP server |
+| `path` | string | No | "/metrics" | HTTP path where metrics are exposed |
+
+### Configuration Example
+
+```yaml
+metrics:
+  enabled: true
+  listen_address: ":9090"
+  path: "/metrics"
+```
+
+### Accessing Metrics
+
+Once enabled, metrics are available at:
+
+- **Metrics endpoint**: `http://localhost:9090/metrics`
+- **Health check**: `http://localhost:9090/health`
+
+### Available Metrics Categories
+
+ChainIndexor provides **33 metrics** across the following categories:
+
+- **Indexing Metrics** (5): Block progress, logs indexed, processing time, indexing rate
+- **Finalized Block** (1): Current finalized block from RPC
+- **RPC Metrics** (5): Request counts, errors, latency, connections, retries
+- **Database Metrics** (4): Query counts, query duration, errors, database size
+- **Maintenance Metrics** (7): Maintenance runs, duration, space reclaimed, WAL checkpoints, VACUUM operations
+- **Reorg Metrics** (4): Reorg detection, depth, blocks rolled back, timestamps
+- **Retention Metrics** (2): Blocks pruned, logs pruned by retention policy
+- **System Metrics** (5): Uptime, component health, errors, goroutines, memory usage
+
+### Prometheus Configuration
+
+Add to your `prometheus.yml`:
+
+```yaml
+scrape_configs:
+  - job_name: 'chainindexor'
+    static_configs:
+      - targets: ['localhost:9090']
+    scrape_interval: 15s
+```
+
+### Grafana Dashboards
+
+Use the exposed metrics to create Grafana dashboards for:
+
+- Real-time indexing progress and lag monitoring
+- RPC health and performance tracking
+- Database query performance analysis
+- System resource utilization
+- Reorg detection and alerting
+
+### Example Queries
+
+```promql
+# Indexing rate (blocks per second)
+rate(chainindexor_blocks_processed_total[5m])
+
+# Block lag from finalized
+chainindexor_finalized_block - chainindexor_last_indexed_block
+
+# RPC error rate
+rate(chainindexor_rpc_errors_total[5m])
+
+# Database query latency (95th percentile)
+histogram_quantile(0.95, rate(chainindexor_db_query_duration_seconds_bucket[5m]))
+
+# Component health status
+chainindexor_component_health
+```
+
+For complete metrics documentation, see [internal/metrics/README.md](internal/metrics/README.md).
 
 ## 📊 Logging Configuration
 

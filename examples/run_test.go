@@ -11,6 +11,7 @@ import (
 	"github.com/goran-ethernal/ChainIndexor/internal/db"
 	"github.com/goran-ethernal/ChainIndexor/internal/downloader"
 	"github.com/goran-ethernal/ChainIndexor/internal/logger"
+	"github.com/goran-ethernal/ChainIndexor/internal/metrics"
 	downloadermig "github.com/goran-ethernal/ChainIndexor/internal/migrations"
 	"github.com/goran-ethernal/ChainIndexor/internal/reorg"
 	"github.com/goran-ethernal/ChainIndexor/internal/rpc"
@@ -29,9 +30,27 @@ func TestRun(t *testing.T) {
 		t.Fatalf("failed to load config: %v", err)
 	}
 
-	ethClient, err := rpc.NewClient(t.Context(), cfg.Downloader.RPCURL) // Example RPC URL
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+
+	ethClient, err := rpc.NewClient(ctx, cfg.Downloader.RPCURL) // Example RPC URL
 	if err != nil {
 		t.Fatalf("failed to create RPC client: %v", err)
+	}
+
+	// Initialize and start metrics server if enabled
+	var metricsServer *metrics.Server
+	if cfg.Metrics != nil && cfg.Metrics.Enabled {
+		metricsServer = metrics.NewServer(cfg.Metrics)
+		if err := metricsServer.Start(ctx); err != nil {
+			t.Fatalf("failed to start metrics server: %v", err)
+		}
+		defer func() {
+			if err := metricsServer.Stop(ctx); err != nil {
+				t.Logf("failed to stop metrics server: %v", err)
+			}
+		}()
+		t.Logf("Metrics server started on %s%s", cfg.Metrics.ListenAddress, cfg.Metrics.Path)
 	}
 
 	err = downloadermig.RunMigrations(cfg.Downloader.DB)
@@ -88,12 +107,9 @@ func TestRun(t *testing.T) {
 
 	downloader.RegisterIndexer(erc20Indexer)
 
-	context, cancel := context.WithCancel(t.Context())
-	defer cancel()
-
 	errCh := make(chan error, 1)
 	go func() {
-		errCh <- downloader.Download(context, *cfg)
+		errCh <- downloader.Download(ctx, *cfg)
 	}()
 
 	select {
