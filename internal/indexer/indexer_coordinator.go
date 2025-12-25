@@ -175,8 +175,9 @@ func (ic *IndexerCoordinator) IndexerStartBlocks() []uint64 {
 
 // logMetrics records metrics for the indexing operation.
 func logMetrics(indexer string, numOfLogsIndexed int, processingStart time.Time, fromBlock, toBlock uint64) {
+	blocksProcessed := toBlock - fromBlock + 1
 	metrics.LogsIndexedInc(indexer, numOfLogsIndexed)
-	metrics.BlocksProcessedInc(indexer, toBlock-fromBlock)
+	metrics.BlocksProcessedInc(indexer, blocksProcessed)
 	metrics.LastIndexedBlockInc(indexer, toBlock)
 
 	elapsed := time.Since(processingStart).Seconds()
@@ -184,7 +185,5 @@ func logMetrics(indexer string, numOfLogsIndexed int, processingStart time.Time,
 		elapsed = 1 // prevent division by zero
 	}
 
-	if numOfLogsIndexed > 0 {
-		metrics.IndexingRateLog(indexer, float64(numOfLogsIndexed)/elapsed)
-	}
+	metrics.IndexingRateLog(indexer, float64(blocksProcessed)/elapsed)
 }

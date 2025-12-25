@@ -8,14 +8,14 @@ import (
 )
 
 var (
-	ReorgsDetected = promauto.NewCounter(
+	reorgsDetected = promauto.NewCounter(
 		prometheus.CounterOpts{
 			Name: "chainindexor_reorgs_detected_total",
 			Help: "Total number of blockchain reorganizations detected",
 		},
 	)
 
-	ReorgDepth = promauto.NewHistogram(
+	reorgDepth = promauto.NewHistogram(
 		prometheus.HistogramOpts{
 			Name:    "chainindexor_reorg_depth_blocks",
 			Help:    "Depth of blockchain reorganizations in blocks",
@@ -23,24 +23,25 @@ var (
 		},
 	)
 
-	ReorgLastDetected = promauto.NewGauge(
+	reorgLastDetected = promauto.NewGauge(
 		prometheus.GaugeOpts{
 			Name: "chainindexor_reorg_last_detected_timestamp",
 			Help: "Unix timestamp of last reorg detection",
 		},
 	)
 
-	ReorgFromBlock = promauto.NewHistogram(
+	reorgFromBlock = promauto.NewHistogram(
 		prometheus.HistogramOpts{
-			Name: "chainindexor_reorg_from_block",
-			Help: "Block numbers where reorgs started",
+			Name:    "chainindexor_reorg_from_block",
+			Help:    "Block numbers where reorgs started",
+			Buckets: []float64{0, 1000000, 3000000, 5000000, 7000000, 9000000, 10000000},
 		},
 	)
 )
 
 func ReorgDetectedLog(depth, fromBlock uint64) {
-	ReorgsDetected.Inc()
-	ReorgDepth.Observe(float64(depth))
-	ReorgLastDetected.Set(float64(time.Now().UTC().Unix()))
-	ReorgFromBlock.Observe(float64(fromBlock))
+	reorgsDetected.Inc()
+	reorgDepth.Observe(float64(depth))
+	reorgLastDetected.Set(float64(time.Now().UTC().Unix()))
+	reorgFromBlock.Observe(float64(fromBlock))
 }

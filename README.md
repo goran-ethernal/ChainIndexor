@@ -305,7 +305,7 @@ ChainIndexor provides **33 metrics** across the following categories:
 - **Maintenance Metrics** (7): Maintenance runs, duration, space reclaimed, WAL checkpoints, VACUUM operations
 - **Reorg Metrics** (4): Reorg detection, depth, blocks rolled back, timestamps
 - **Retention Metrics** (2): Blocks pruned, logs pruned by retention policy
-- **System Metrics** (5): Uptime, component health, errors, goroutines, memory usage
+- **System Metrics** (5): Uptime, component health, goroutines, memory usage
 
 ### Prometheus Configuration
 

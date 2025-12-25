@@ -44,3 +44,8 @@ ci/cd:
     - any-glob-to-any-file: '.github/**/*'
   - changed-files:
     - any-glob-to-any-file: 'Makefile'
+
+metrics:
+  - changed-files:
+    - any-glob-to-any-file: 'internal/**/metrics.go'
+    - any-glob-to-any-file: 'internal/metrics/**'

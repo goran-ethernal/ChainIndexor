@@ -320,7 +320,7 @@ func (d *Downloader) Download(ctx context.Context, cfg config.Config) error {
 
 			lastIndexedBlock = result.ToBlock
 			metrics.LastIndexedBlockInc(internalcommon.ComponentDownloader, lastIndexedBlock)
-			metrics.BlocksProcessedInc(internalcommon.ComponentDownloader, lastIndexedBlock-state.LastIndexedBlock)
+			metrics.BlocksProcessedInc(internalcommon.ComponentDownloader, result.ToBlock-result.FromBlock+1)
 
 			d.log.Infof("checkpoint saved: from_block=%d, to_block=%d, to_block_hash=%s, mode=%s, logs_processed=%d",
 				result.FromBlock,
