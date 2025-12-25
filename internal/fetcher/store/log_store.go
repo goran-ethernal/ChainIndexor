@@ -5,12 +5,14 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"time"
 
 	ethcommon "github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/goran-ethernal/ChainIndexor/internal/common"
 	"github.com/goran-ethernal/ChainIndexor/internal/db"
 	"github.com/goran-ethernal/ChainIndexor/internal/logger"
+	"github.com/goran-ethernal/ChainIndexor/internal/metrics"
 	"github.com/goran-ethernal/ChainIndexor/pkg/config"
 	"github.com/goran-ethernal/ChainIndexor/pkg/fetcher/store"
 	"github.com/russross/meddler"
@@ -63,11 +65,15 @@ func (s *LogStore) GetLogs(
 		WHERE address = ? AND from_block <= ? AND to_block >= ?
 		ORDER BY from_block ASC
 	`
+	start := time.Now()
+	metrics.DBQueryInc(s.dbConfig.Path, "select")
 	var dbCoverages []*dbCoverage
 	err := meddler.QueryAll(s.db, &dbCoverages, coverageQuery, address.Hex(), toBlock, fromBlock)
 	if err != nil {
+		metrics.DBErrorsInc(s.dbConfig.Path, "query_error")
 		return nil, nil, fmt.Errorf("failed to query coverage: %w", err)
 	}
+	metrics.DBQueryDuration(s.dbConfig.Path, "select", time.Since(start))
 
 	coverage := make([]store.CoverageRange, len(dbCoverages))
 	for i, c := range dbCoverages {
@@ -83,11 +89,15 @@ func (s *LogStore) GetLogs(
 		WHERE address = ? AND block_number >= ? AND block_number <= ?
 		ORDER BY block_number ASC, log_index ASC
 	`
+	start = time.Now()
+	metrics.DBQueryInc(s.dbConfig.Path, "select")
 	var dbLogs []*dbLog
 	err = meddler.QueryAll(s.db, &dbLogs, logsQuery, address.Hex(), fromBlock, toBlock)
 	if err != nil {
+		metrics.DBErrorsInc(s.dbConfig.Path, "query_error")
 		return nil, nil, fmt.Errorf("failed to query logs: %w", err)
 	}
+	metrics.DBQueryDuration(s.dbConfig.Path, "select", time.Since(start))
 
 	logs := make([]types.Log, len(dbLogs))
 	for i, dl := range dbLogs {
@@ -218,9 +228,13 @@ func (s *LogStore) StoreLogs(
 		return nil
 	}
 
+	start := time.Now()
+	metrics.DBQueryInc(s.dbConfig.Path, "insert")
 	if err := s.storeLogsInternal(ctx, addresses, topics, logs, fromBlock, toBlock); err != nil {
+		metrics.DBErrorsInc(s.dbConfig.Path, "insert_error")
 		return err
 	}
+	metrics.DBQueryDuration(s.dbConfig.Path, "insert", time.Since(start))
 
 	// Apply retention policy if enabled
 	if err := s.applyRetentionIfNeeded(ctx); err != nil {
@@ -463,6 +477,9 @@ func (s *LogStore) pruneLogsBeforeBlock(ctx context.Context, beforeBlock uint64)
 	}
 
 	s.log.Infof("Pruned %d logs before block %d", rowsAffected, beforeBlock)
+
+	RetentionBlocksPrunedInc("downloader-log-store", blockCount)
+	RetentionLogsPrunedInc("downloader-log-store", uint64(rowsAffected))
 
 	return blockCount, nil
 }

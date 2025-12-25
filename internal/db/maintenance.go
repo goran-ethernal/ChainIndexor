@@ -184,6 +184,9 @@ func (m *MaintenanceCoordinator) RunMaintenance(ctx context.Context) error {
 	m.log.Info("Starting database maintenance")
 	start := time.Now().UTC()
 
+	// Track maintenance run
+	MaintenanceRunsInc()
+
 	// Acquire write lock - blocks new operations and waits for ongoing ones to complete
 	m.opLock.Lock()
 	defer m.opLock.Unlock()
@@ -221,23 +224,33 @@ func (m *MaintenanceCoordinator) RunMaintenance(ctx context.Context) error {
 
 	duration := time.Since(start)
 
-	// Update metrics
+	// Update internal metrics
 	m.metricsLock.Lock()
 	m.lastMaintenanceTime = time.Now().UTC()
 	m.maintenanceCount++
 	m.lastMaintenanceErr = maintenanceErr
 	m.metricsLock.Unlock()
 
+	// Update Prometheus metrics
+	MaintenanceDurationLog(duration)
+	MaintenanceLastRunLog()
+
 	if maintenanceErr != nil {
+		MaintenanceErrorInc()
 		m.log.Warnf("Maintenance completed with errors in %v: %v", duration, maintenanceErr)
 		return maintenanceErr
 	}
 
+	MaintenanceSuccessInc()
 	m.log.Infof("Maintenance completed successfully in %v.", duration)
 
 	if initialDBSize > finalDBSize {
-		m.log.Infof("Maintenance cleaned: %d MB", common.BytesToMB(uint64(initialDBSize-finalDBSize)))
+		spaceReclaimed := uint64(initialDBSize - finalDBSize)
+		MaintenanceSpaceReclaimedLog(spaceReclaimed)
+		m.log.Infof("Maintenance cleaned: %d MB", common.BytesToMB(spaceReclaimed))
 	}
+
+	DBSizeLog(finalDBSize)
 
 	return nil
 }
@@ -266,6 +279,9 @@ func (m *MaintenanceCoordinator) walCheckpoint() error {
 	m.log.Infof("WAL checkpoint complete - mode: %s, busy: %d, log_frames: %d, checkpointed: %d",
 		m.config.WALCheckpointMode, busyCount, logFrames, checkpointedFrames)
 
+	// Track checkpoint
+	WALCheckpointInc(strings.ToLower(m.config.WALCheckpointMode))
+
 	if busyCount > 0 {
 		m.log.Warnf("WAL checkpoint encountered %d busy pages (some pages not checkpointed)", busyCount)
 	}
@@ -290,6 +306,8 @@ func (m *MaintenanceCoordinator) vacuum() error {
 		return fmt.Errorf("vacuum failed: %w", err)
 	}
 
+	// Track vacuum
+	VacuumRunsInc()
 	m.log.Info("VACUUM completed successfully")
 	return nil
 }

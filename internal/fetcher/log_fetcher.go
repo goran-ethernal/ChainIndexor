@@ -318,6 +318,8 @@ func (lf *LogFetcher) getFinalizedBlock(ctx context.Context) (*types.Header, err
 		return nil, err
 	}
 
+	FinalizedBlockLogSet(header.Number.Uint64())
+
 	return header, nil
 }
 

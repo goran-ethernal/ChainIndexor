@@ -162,6 +162,51 @@ func (_c *Indexer_HandleReorg_Call) RunAndReturn(run func(uint64) error) *Indexe
 	return _c
 }
 
+// Name provides a mock function with no fields
+func (_m *Indexer) Name() string {
+	ret := _m.Called()
+
+	if len(ret) == 0 {
+		panic("no return value specified for Name")
+	}
+
+	var r0 string
+	if rf, ok := ret.Get(0).(func() string); ok {
+		r0 = rf()
+	} else {
+		r0 = ret.Get(0).(string)
+	}
+
+	return r0
+}
+
+// Indexer_Name_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'Name'
+type Indexer_Name_Call struct {
+	*mock.Call
+}
+
+// Name is a helper method to define mock.On call
+func (_e *Indexer_Expecter) Name() *Indexer_Name_Call {
+	return &Indexer_Name_Call{Call: _e.mock.On("Name")}
+}
+
+func (_c *Indexer_Name_Call) Run(run func()) *Indexer_Name_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run()
+	})
+	return _c
+}
+
+func (_c *Indexer_Name_Call) Return(_a0 string) *Indexer_Name_Call {
+	_c.Call.Return(_a0)
+	return _c
+}
+
+func (_c *Indexer_Name_Call) RunAndReturn(run func() string) *Indexer_Name_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // StartBlock provides a mock function with no fields
 func (_m *Indexer) StartBlock() uint64 {
 	ret := _m.Called()

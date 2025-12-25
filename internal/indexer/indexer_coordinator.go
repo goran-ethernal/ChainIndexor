@@ -3,10 +3,13 @@ package indexer
 import (
 	"fmt"
 	"sync"
+	"time"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/goran-ethernal/ChainIndexor/internal/metrics"
 	"github.com/goran-ethernal/ChainIndexor/pkg/indexer"
+	"golang.org/x/sync/errgroup"
 )
 
 // IndexerCoordinator manages multiple indexers and routes events to them based on address and topics.
@@ -65,7 +68,7 @@ func (ic *IndexerCoordinator) RegisterIndexer(idx indexer.Indexer) {
 
 // HandleLogs processes a batch of logs and routes them to the appropriate indexers.
 // Each log is sent to indexers that registered interest in both its address AND topic.
-func (ic *IndexerCoordinator) HandleLogs(logs []types.Log) error {
+func (ic *IndexerCoordinator) HandleLogs(logs []types.Log, from, to uint64) error {
 	ic.mu.RLock()
 	defer ic.mu.RUnlock()
 
@@ -100,23 +103,44 @@ func (ic *IndexerCoordinator) HandleLogs(logs []types.Log) error {
 		}
 	}
 
-	// Call HandleLogs for each indexer with their relevant logs
-	for indexer, relevantLogs := range indexerLogs {
-		// Filter logs based on the indexer's start block
-		startBlock := ic.startBlocks[indexer]
-		filteredLogs := make([]types.Log, 0, len(relevantLogs))
-		for _, log := range relevantLogs {
-			if log.BlockNumber >= startBlock {
-				filteredLogs = append(filteredLogs, log)
-			}
-		}
+	// Call HandleLogs for each indexer with their relevant logs concurrently
+	var g errgroup.Group
+	for idx, relevantLogs := range indexerLogs {
+		// Capture loop variables
+		indexer := idx
+		indexerName := indexer.Name()
+		logs := relevantLogs
 
-		// Only call HandleLogs if there are logs to process
-		if len(filteredLogs) > 0 {
-			if err := indexer.HandleLogs(filteredLogs); err != nil {
-				return fmt.Errorf("indexer failed to handle logs: %w", err)
+		g.Go(func() error {
+			start := time.Now()
+			defer func() {
+				metrics.BlockProcessingTimeLog(indexerName, time.Since(start))
+			}()
+
+			// Filter logs based on the indexer's start block
+			startBlock := ic.startBlocks[indexer]
+			filteredLogs := make([]types.Log, 0, len(logs))
+			for _, log := range logs {
+				if log.BlockNumber >= startBlock {
+					filteredLogs = append(filteredLogs, log)
+				}
 			}
-		}
+
+			// Only call HandleLogs if there are logs to process
+			if len(filteredLogs) > 0 {
+				if err := indexer.HandleLogs(filteredLogs); err != nil {
+					return fmt.Errorf("indexer failed to handle logs: %w", err)
+				}
+			}
+
+			logMetrics(indexerName, len(filteredLogs), start, from, to)
+
+			return nil
+		})
+	}
+
+	if err := g.Wait(); err != nil {
+		return err
 	}
 
 	return nil
@@ -137,6 +161,7 @@ func (ic *IndexerCoordinator) HandleReorg(blockNum uint64) error {
 	return nil
 }
 
+// IndexerStartBlocks returns a slice of start blocks for all registered indexers.
 func (ic *IndexerCoordinator) IndexerStartBlocks() []uint64 {
 	ic.mu.RLock()
 	defer ic.mu.RUnlock()
@@ -146,4 +171,20 @@ func (ic *IndexerCoordinator) IndexerStartBlocks() []uint64 {
 		startBlocks = append(startBlocks, ic.startBlocks[idx])
 	}
 	return startBlocks
+}
+
+// logMetrics records metrics for the indexing operation.
+func logMetrics(indexer string, numOfLogsIndexed int, processingStart time.Time, fromBlock, toBlock uint64) {
+	metrics.LogsIndexedInc(indexer, numOfLogsIndexed)
+	metrics.BlocksProcessedInc(indexer, toBlock-fromBlock)
+	metrics.LastIndexedBlockInc(indexer, toBlock)
+
+	elapsed := time.Since(processingStart).Seconds()
+	if elapsed == 0 {
+		elapsed = 1 // prevent division by zero
+	}
+
+	if numOfLogsIndexed > 0 {
+		metrics.IndexingRateLog(indexer, float64(numOfLogsIndexed)/elapsed)
+	}
 }

@@ -54,10 +54,9 @@ type Approval struct {
 
 // ERC20TokenIndexer indexes ERC20 token Transfer and Approval events.
 type ERC20TokenIndexer struct {
-	name       string
-	startBlock uint64
-	db         *sql.DB
-	log        *logger.Logger
+	cfg config.IndexerConfig
+	db  *sql.DB
+	log *logger.Logger
 
 	// Map of contract addresses to event topic hashes
 	eventsToIndex map[common.Address]map[common.Hash]struct{}
@@ -101,14 +100,18 @@ func NewERC20TokenIndexer(cfg config.IndexerConfig, log *logger.Logger) (*ERC20T
 	}
 
 	return &ERC20TokenIndexer{
-		name:          cfg.Name,
-		startBlock:    cfg.StartBlock,
+		cfg:           cfg,
 		db:            database,
 		log:           log,
 		eventsToIndex: eventsToIndex,
 		transferTopic: transferTopic,
 		approvalTopic: approvalTopic,
 	}, nil
+}
+
+// Name returns the name of the indexer.
+func (idx *ERC20TokenIndexer) Name() string {
+	return idx.cfg.Name
 }
 
 // EventsToIndex returns the map of contract addresses to event topic hashes.
@@ -220,7 +223,7 @@ func (idx *ERC20TokenIndexer) HandleReorg(blockNum uint64) error {
 
 // StartBlock returns the block number from which this indexer should start.
 func (idx *ERC20TokenIndexer) StartBlock() uint64 {
-	return idx.startBlock
+	return idx.cfg.StartBlock
 }
 
 // Close closes the database connection.

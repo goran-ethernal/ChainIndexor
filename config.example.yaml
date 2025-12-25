@@ -20,6 +20,12 @@ logging:
     log-store: "info"
     maintenance: "info"
 
+# Optional: Prometheus metrics configuration
+metrics:
+  enabled: true               # enable metrics collection and HTTP endpoint
+  listen_address: ":9090"     # address to expose metrics (default: ":9090")
+  path: "/metrics"            # metrics endpoint path (default: "/metrics")
+
 downloader:
   rpc_url: "https://mainnet.infura.io/v3/XXXX"
   chunk_size: 5000            # block range per eth_getLogs call

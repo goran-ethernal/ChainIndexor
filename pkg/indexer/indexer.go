@@ -25,4 +25,7 @@ type Indexer interface {
 	// The downloader will use the minimum StartBlock across all registered indexers to determine
 	// the earliest block to fetch. Each indexer will only receive logs from blocks >= its StartBlock.
 	StartBlock() uint64
+
+	// Name returns the name of the indexer for logging and metrics purposes.
+	Name() string
 }

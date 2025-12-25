@@ -14,6 +14,7 @@ import (
 	"github.com/goran-ethernal/ChainIndexor/internal/fetcher/store"
 	"github.com/goran-ethernal/ChainIndexor/internal/indexer"
 	"github.com/goran-ethernal/ChainIndexor/internal/logger"
+	"github.com/goran-ethernal/ChainIndexor/internal/metrics"
 	"github.com/goran-ethernal/ChainIndexor/internal/rpc"
 	"github.com/goran-ethernal/ChainIndexor/internal/types"
 	"github.com/goran-ethernal/ChainIndexor/pkg/config"
@@ -81,6 +82,9 @@ func New(
 		topics:                 make([][]common.Hash, 0),
 		addressStartBlocks:     make(map[common.Address]uint64),
 	}
+
+	// Initialize component health
+	metrics.ComponentHealthSet(internalcommon.ComponentDownloader, true)
 
 	d.log.Info("downloader initialized")
 
@@ -289,7 +293,9 @@ func (d *Downloader) Download(ctx context.Context, cfg config.Config) error {
 				result.ToBlock,
 			)
 
-			if err := d.coordinator.HandleLogs(result.Logs); err != nil {
+			metrics.LogsIndexedInc(internalcommon.ComponentDownloader, len(result.Logs))
+
+			if err := d.coordinator.HandleLogs(result.Logs, result.FromBlock, result.ToBlock); err != nil {
 				return fmt.Errorf("failed to handle logs: %w", err)
 			}
 		}
@@ -313,6 +319,8 @@ func (d *Downloader) Download(ctx context.Context, cfg config.Config) error {
 			}
 
 			lastIndexedBlock = result.ToBlock
+			metrics.LastIndexedBlockInc(internalcommon.ComponentDownloader, lastIndexedBlock)
+			metrics.BlocksProcessedInc(internalcommon.ComponentDownloader, lastIndexedBlock-state.LastIndexedBlock)
 
 			d.log.Infof("checkpoint saved: from_block=%d, to_block=%d, to_block_hash=%s, mode=%s, logs_processed=%d",
 				result.FromBlock,
@@ -362,6 +370,9 @@ func (d *Downloader) handleReorg(firstReorgBlock uint64) error {
 // Close closes the downloader and releases resources.
 func (d *Downloader) Close() error {
 	d.log.Info("closing downloader")
+
+	// Mark component as unhealthy
+	metrics.ComponentHealthSet(internalcommon.ComponentDownloader, false)
 
 	if d.syncManager != nil {
 		if err := d.syncManager.Close(); err != nil {

@@ -18,6 +18,9 @@ type Config struct {
 
 	// Logging contains logging configuration
 	Logging *LoggingConfig `yaml:"logging,omitempty" json:"logging,omitempty" toml:"logging,omitempty"`
+
+	// Metrics contains Prometheus metrics configuration
+	Metrics *MetricsConfig `yaml:"metrics,omitempty" json:"metrics,omitempty" toml:"metrics,omitempty"`
 }
 
 // DownloaderConfig represents the configuration for the downloader.
@@ -264,6 +267,46 @@ func (l *LoggingConfig) IsDevelopment() bool {
 	return l.Development
 }
 
+// MetricsConfig configures Prometheus metrics exposition.
+type MetricsConfig struct {
+	// Enabled controls whether metrics collection and HTTP endpoint are active
+	Enabled bool `yaml:"enabled" json:"enabled" toml:"enabled"`
+
+	// ListenAddress is the address to bind the metrics HTTP server to
+	// Format: "host:port" or ":port"
+	ListenAddress string `yaml:"listen_address" json:"listen_address" toml:"listen_address"`
+
+	// Path is the HTTP path where metrics are exposed
+	Path string `yaml:"path" json:"path" toml:"path"`
+}
+
+// ApplyDefaults sets default values for optional metrics configuration fields.
+func (m *MetricsConfig) ApplyDefaults() {
+	if m.ListenAddress == "" {
+		m.ListenAddress = ":9090"
+	}
+	if m.Path == "" {
+		m.Path = "/metrics"
+	}
+	// Enabled defaults to false (zero value)
+}
+
+// Validate checks if the metrics configuration is valid.
+func (m *MetricsConfig) Validate() error {
+	if m.Enabled {
+		if m.ListenAddress == "" {
+			return fmt.Errorf("listen_address is required when metrics are enabled")
+		}
+		if m.Path == "" {
+			return fmt.Errorf("path is required when metrics are enabled")
+		}
+		if m.Path[0] != '/' {
+			return fmt.Errorf("path must start with '/'")
+		}
+	}
+	return nil
+}
+
 // IndexerConfig represents the configuration for a single indexer.
 type IndexerConfig struct {
 	// Name is a unique identifier for this indexer
@@ -309,6 +352,11 @@ func (c *Config) ApplyDefaults() {
 	if c.Logging != nil {
 		c.Logging.ApplyDefaults()
 	}
+
+	// Apply metrics defaults
+	if c.Metrics != nil {
+		c.Metrics.ApplyDefaults()
+	}
 }
 
 // Validate checks if the configuration is valid.
@@ -348,6 +396,13 @@ func (c *Config) Validate() error {
 	if c.Logging != nil {
 		if err := c.Logging.Validate(); err != nil {
 			return err
+		}
+	}
+
+	// Validate metrics configuration
+	if c.Metrics != nil {
+		if err := c.Metrics.Validate(); err != nil {
+			return fmt.Errorf("metrics: %w", err)
 		}
 	}
 

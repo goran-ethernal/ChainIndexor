@@ -11,6 +11,11 @@
       "maintenance": "info"
     }
   },
+  "metrics": {
+    "enabled": true,
+    "listen_address": ":9090",
+    "path": "/metrics"
+  },
   "downloader": {
     "rpc_url": "https://mainnet.infura.io/v3/XXXX",
     "chunk_size": 5000,

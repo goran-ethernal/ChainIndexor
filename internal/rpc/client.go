@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"math/big"
+	"time"
 
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/core/types"
@@ -42,31 +43,84 @@ func (c *Client) Close() {
 
 // GetLogs retrieves logs matching the given filter query.
 func (c *Client) GetLogs(ctx context.Context, query ethereum.FilterQuery) ([]types.Log, error) {
-	return c.eth.FilterLogs(ctx, query)
+	start := time.Now()
+	RPCMethodInc("eth_getLogs")
+
+	logs, err := c.eth.FilterLogs(ctx, query)
+	if err != nil {
+		RPCMethodError("eth_getLogs", "error")
+		return nil, err
+	}
+
+	RPCMethodDuration("eth_getLogs", time.Since(start))
+	return logs, nil
 }
 
 // GetBlockHeader retrieves the header for a specific block number.
 func (c *Client) GetBlockHeader(ctx context.Context, blockNum uint64) (*types.Header, error) {
-	return c.eth.HeaderByNumber(ctx, big.NewInt(int64(blockNum)))
+	start := time.Now()
+	RPCMethodInc("eth_getBlockByNumber")
+
+	header, err := c.eth.HeaderByNumber(ctx, big.NewInt(int64(blockNum)))
+	if err != nil {
+		RPCMethodError("eth_getBlockByNumber", "error")
+		return nil, err
+	}
+
+	RPCMethodDuration("eth_getBlockByNumber", time.Since(start))
+	return header, nil
 }
 
 // GetLatestBlockHeader retrieves the latest block header.
 func (c *Client) GetLatestBlockHeader(ctx context.Context) (*types.Header, error) {
-	return c.eth.HeaderByNumber(ctx, nil)
+	start := time.Now()
+	RPCMethodInc("eth_getBlockByNumber")
+
+	header, err := c.eth.HeaderByNumber(ctx, nil)
+	if err != nil {
+		RPCMethodError("eth_getBlockByNumber", "error")
+		return nil, err
+	}
+
+	RPCMethodDuration("eth_getBlockByNumber", time.Since(start))
+	return header, nil
 }
 
 // GetFinalizedBlockHeader retrieves the finalized block header.
 func (c *Client) GetFinalizedBlockHeader(ctx context.Context) (*types.Header, error) {
-	return c.eth.HeaderByNumber(ctx, big.NewInt(int64(rpc.FinalizedBlockNumber)))
+	start := time.Now()
+	RPCMethodInc("eth_getBlockByNumber")
+
+	header, err := c.eth.HeaderByNumber(ctx, big.NewInt(int64(rpc.FinalizedBlockNumber)))
+	if err != nil {
+		RPCMethodError("eth_getBlockByNumber", "error")
+		return nil, err
+	}
+
+	RPCMethodDuration("eth_getBlockByNumber", time.Since(start))
+	return header, nil
 }
 
 // GetSafeBlockHeader retrieves the safe block header.
 func (c *Client) GetSafeBlockHeader(ctx context.Context) (*types.Header, error) {
-	return c.eth.HeaderByNumber(ctx, big.NewInt(int64(rpc.SafeBlockNumber)))
+	start := time.Now()
+	RPCMethodInc("eth_getBlockByNumber")
+
+	header, err := c.eth.HeaderByNumber(ctx, big.NewInt(int64(rpc.SafeBlockNumber)))
+	if err != nil {
+		RPCMethodError("eth_getBlockByNumber", "error")
+		return nil, err
+	}
+
+	RPCMethodDuration("eth_getBlockByNumber", time.Since(start))
+	return header, nil
 }
 
 // BatchGetLogs retrieves logs for multiple filter queries in a single batch call.
 func (c *Client) BatchGetLogs(ctx context.Context, queries []ethereum.FilterQuery) ([][]types.Log, error) {
+	start := time.Now()
+	RPCMethodInc("eth_getLogs_batch")
+
 	batch := make([]rpc.BatchElem, len(queries))
 	results := make([][]types.Log, len(queries))
 
@@ -79,16 +133,19 @@ func (c *Client) BatchGetLogs(ctx context.Context, queries []ethereum.FilterQuer
 	}
 
 	if err := c.rpc.BatchCallContext(ctx, batch); err != nil {
+		RPCMethodError("eth_getLogs_batch", "error")
 		return nil, err
 	}
 
 	// Check for individual errors
 	for _, elem := range batch {
 		if elem.Error != nil {
+			RPCMethodError("eth_getLogs_batch", "batch_element_error")
 			return nil, elem.Error
 		}
 	}
 
+	RPCMethodDuration("eth_getLogs_batch", time.Since(start))
 	return results, nil
 }
 
@@ -96,6 +153,9 @@ func (c *Client) BatchGetLogs(ctx context.Context, queries []ethereum.FilterQuer
 func (c *Client) BatchGetBlockHeaders(ctx context.Context, blockNums []uint64) ([]*types.Header, error) {
 	const maxBatch = 100
 	var allResults []*types.Header
+
+	start := time.Now()
+	RPCMethodInc("eth_getBlockByNumber_batch")
 
 	for i := 0; i < len(blockNums); i += maxBatch {
 		end := min(i+maxBatch, len(blockNums))
@@ -113,12 +173,14 @@ func (c *Client) BatchGetBlockHeaders(ctx context.Context, blockNums []uint64) (
 		}
 
 		if err := c.rpc.BatchCallContext(ctx, batch); err != nil {
+			RPCMethodError("eth_getBlockByNumber_batch", "error")
 			return nil, err
 		}
 
 		// Check for individual errors
 		for _, elem := range batch {
 			if elem.Error != nil {
+				RPCMethodError("eth_getBlockByNumber_batch", "batch_element_error")
 				return nil, elem.Error
 			}
 		}
@@ -126,6 +188,7 @@ func (c *Client) BatchGetBlockHeaders(ctx context.Context, blockNums []uint64) (
 		allResults = append(allResults, results...)
 	}
 
+	RPCMethodDuration("eth_getBlockByNumber_batch", time.Since(start))
 	return allResults, nil
 }
 

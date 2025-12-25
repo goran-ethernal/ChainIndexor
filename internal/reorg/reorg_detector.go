@@ -8,8 +8,10 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
+	internalcommon "github.com/goran-ethernal/ChainIndexor/internal/common"
 	"github.com/goran-ethernal/ChainIndexor/internal/db"
 	"github.com/goran-ethernal/ChainIndexor/internal/logger"
+	"github.com/goran-ethernal/ChainIndexor/internal/metrics"
 	"github.com/goran-ethernal/ChainIndexor/pkg/reorg"
 	"github.com/goran-ethernal/ChainIndexor/pkg/rpc"
 	"github.com/russross/meddler"
@@ -38,6 +40,9 @@ func NewReorgDetector(
 		log:                    log,
 		maintenanceCoordinator: maintenanceCoordinator,
 	}
+
+	// Initialize component health
+	metrics.ComponentHealthSet(internalcommon.ComponentReorgDetector, true)
 
 	detector.log.Info("reorg detector initialized")
 
@@ -129,6 +134,7 @@ func (r *ReorgDetector) VerifyAndRecordBlocks(
 					cachedHash.Hex(),
 					currentHash.Hex(),
 				)
+				ReorgDetectedLog(uint64(len(nonFinalizedBlocks)-i), header.Number.Uint64())
 				return nil, reorg.NewReorgError(header.Number.Uint64(),
 					fmt.Sprintf("cached_hash=%s current_hash=%s", cachedHash.Hex(), currentHash.Hex()))
 			}
@@ -164,7 +170,7 @@ func (r *ReorgDetector) VerifyAndRecordBlocks(
 	}
 
 	// Step 3b: Verify consistency between logs and headers
-	for _, header := range headers {
+	for i, header := range headers {
 		blockNum := header.Number.Uint64()
 		headerHash := header.Hash()
 
@@ -176,6 +182,7 @@ func (r *ReorgDetector) VerifyAndRecordBlocks(
 					logHash.Hex(),
 					headerHash.Hex(),
 				)
+				ReorgDetectedLog(uint64(len(headers)-i), blockNum)
 				return nil, reorg.NewReorgError(blockNum,
 					fmt.Sprintf("log_hash=%s header_hash=%s", logHash.Hex(), headerHash.Hex()))
 			}
@@ -195,6 +202,7 @@ func (r *ReorgDetector) VerifyAndRecordBlocks(
 					expectedParent.Hex(),
 					actualParent.Hex(),
 				)
+				ReorgDetectedLog(uint64(len(headers)-i), headers[i].Number.Uint64())
 				return nil, reorg.NewReorgError(headers[i].Number.Uint64(),
 					fmt.Sprintf("chain discontinuity between blocks %d and %d",
 						headers[i-1].Number.Uint64(), headers[i].Number.Uint64()))
@@ -294,5 +302,6 @@ func (r *ReorgDetector) pruneOldBlocksTx(tx *sql.Tx, keepFromBlock uint64) error
 
 // Close closes the database connection.
 func (r *ReorgDetector) Close() error {
+	metrics.ComponentHealthSet(internalcommon.ComponentReorgDetector, false)
 	return r.db.Close()
 }
