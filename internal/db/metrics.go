@@ -9,12 +9,11 @@ import (
 
 var (
 	// Maintenance metrics
-	maintenanceRuns = promauto.NewCounterVec(
+	maintenanceRuns = promauto.NewCounter(
 		prometheus.CounterOpts{
 			Name: "chainindexor_maintenance_runs_total",
 			Help: "Total number of maintenance operations",
 		},
-		[]string{},
 	)
 
 	maintenanceOutcomes = promauto.NewCounterVec(
@@ -25,29 +24,26 @@ var (
 		[]string{"status"},
 	)
 
-	maintenanceDuration = promauto.NewHistogramVec(
+	maintenanceDuration = promauto.NewHistogram(
 		prometheus.HistogramOpts{
 			Name:    "chainindexor_maintenance_duration_seconds",
 			Help:    "Duration of maintenance operations",
 			Buckets: prometheus.DefBuckets,
 		},
-		[]string{},
 	)
 
-	maintenanceLastRun = promauto.NewGaugeVec(
+	maintenanceLastRun = promauto.NewGauge(
 		prometheus.GaugeOpts{
 			Name: "chainindexor_maintenance_last_run_timestamp",
 			Help: "Unix timestamp of last maintenance run",
 		},
-		[]string{},
 	)
 
-	maintenanceSpaceReclaimed = promauto.NewGaugeVec(
+	maintenanceSpaceReclaimed = promauto.NewGauge(
 		prometheus.GaugeOpts{
 			Name: "chainindexor_maintenance_space_reclaimed_bytes",
 			Help: "Bytes reclaimed by last maintenance operation",
 		},
-		[]string{},
 	)
 
 	walCheckpoints = promauto.NewCounterVec(
@@ -58,12 +54,11 @@ var (
 		[]string{"mode"},
 	)
 
-	vacuumRuns = promauto.NewCounterVec(
+	vacuumRuns = promauto.NewCounter(
 		prometheus.CounterOpts{
 			Name: "chainindexor_vacuum_total",
 			Help: "Total number of VACUUM operations",
 		},
-		[]string{},
 	)
 
 	dbSize = promauto.NewGaugeVec(
@@ -76,15 +71,15 @@ var (
 )
 
 func MaintenanceRunsInc() {
-	maintenanceRuns.WithLabelValues().Inc()
+	maintenanceRuns.Inc()
 }
 
 func MaintenanceDurationLog(duration time.Duration) {
-	maintenanceDuration.WithLabelValues().Observe(duration.Seconds())
+	maintenanceDuration.Observe(duration.Seconds())
 }
 
 func MaintenanceLastRunLog() {
-	maintenanceLastRun.WithLabelValues().Set(float64(time.Now().UTC().Unix()))
+	maintenanceLastRun.Set(float64(time.Now().UTC().Unix()))
 }
 
 func MaintenanceErrorInc() {
@@ -96,7 +91,7 @@ func MaintenanceSuccessInc() {
 }
 
 func MaintenanceSpaceReclaimedLog(bytesReclaimed uint64) {
-	maintenanceSpaceReclaimed.WithLabelValues().Set(float64(bytesReclaimed))
+	maintenanceSpaceReclaimed.Set(float64(bytesReclaimed))
 }
 
 func WALCheckpointInc(mode string) {
@@ -104,7 +99,7 @@ func WALCheckpointInc(mode string) {
 }
 
 func VacuumRunsInc() {
-	vacuumRuns.WithLabelValues().Inc()
+	vacuumRuns.Inc()
 }
 
 func DBSizeLog(sizeBytes int64) {

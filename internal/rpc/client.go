@@ -45,6 +45,9 @@ func (c *Client) Close() {
 func (c *Client) GetLogs(ctx context.Context, query ethereum.FilterQuery) ([]types.Log, error) {
 	start := time.Now()
 	RPCMethodInc("eth_getLogs")
+	defer func() {
+		RPCMethodDuration("eth_getLogs", time.Since(start))
+	}()
 
 	logs, err := c.eth.FilterLogs(ctx, query)
 	if err != nil {
@@ -52,7 +55,6 @@ func (c *Client) GetLogs(ctx context.Context, query ethereum.FilterQuery) ([]typ
 		return nil, err
 	}
 
-	RPCMethodDuration("eth_getLogs", time.Since(start))
 	return logs, nil
 }
 
@@ -60,6 +62,9 @@ func (c *Client) GetLogs(ctx context.Context, query ethereum.FilterQuery) ([]typ
 func (c *Client) GetBlockHeader(ctx context.Context, blockNum uint64) (*types.Header, error) {
 	start := time.Now()
 	RPCMethodInc("eth_getBlockByNumber")
+	defer func() {
+		RPCMethodDuration("eth_getBlockByNumber", time.Since(start))
+	}()
 
 	header, err := c.eth.HeaderByNumber(ctx, big.NewInt(int64(blockNum)))
 	if err != nil {
@@ -67,7 +72,6 @@ func (c *Client) GetBlockHeader(ctx context.Context, blockNum uint64) (*types.He
 		return nil, err
 	}
 
-	RPCMethodDuration("eth_getBlockByNumber", time.Since(start))
 	return header, nil
 }
 
@@ -75,6 +79,9 @@ func (c *Client) GetBlockHeader(ctx context.Context, blockNum uint64) (*types.He
 func (c *Client) GetLatestBlockHeader(ctx context.Context) (*types.Header, error) {
 	start := time.Now()
 	RPCMethodInc("eth_getBlockByNumber")
+	defer func() {
+		RPCMethodDuration("eth_getBlockByNumber", time.Since(start))
+	}()
 
 	header, err := c.eth.HeaderByNumber(ctx, nil)
 	if err != nil {
@@ -82,7 +89,6 @@ func (c *Client) GetLatestBlockHeader(ctx context.Context) (*types.Header, error
 		return nil, err
 	}
 
-	RPCMethodDuration("eth_getBlockByNumber", time.Since(start))
 	return header, nil
 }
 
@@ -90,6 +96,9 @@ func (c *Client) GetLatestBlockHeader(ctx context.Context) (*types.Header, error
 func (c *Client) GetFinalizedBlockHeader(ctx context.Context) (*types.Header, error) {
 	start := time.Now()
 	RPCMethodInc("eth_getBlockByNumber")
+	defer func() {
+		RPCMethodDuration("eth_getBlockByNumber", time.Since(start))
+	}()
 
 	header, err := c.eth.HeaderByNumber(ctx, big.NewInt(int64(rpc.FinalizedBlockNumber)))
 	if err != nil {
@@ -97,7 +106,6 @@ func (c *Client) GetFinalizedBlockHeader(ctx context.Context) (*types.Header, er
 		return nil, err
 	}
 
-	RPCMethodDuration("eth_getBlockByNumber", time.Since(start))
 	return header, nil
 }
 
@@ -105,6 +113,9 @@ func (c *Client) GetFinalizedBlockHeader(ctx context.Context) (*types.Header, er
 func (c *Client) GetSafeBlockHeader(ctx context.Context) (*types.Header, error) {
 	start := time.Now()
 	RPCMethodInc("eth_getBlockByNumber")
+	defer func() {
+		RPCMethodDuration("eth_getBlockByNumber", time.Since(start))
+	}()
 
 	header, err := c.eth.HeaderByNumber(ctx, big.NewInt(int64(rpc.SafeBlockNumber)))
 	if err != nil {
@@ -112,7 +123,6 @@ func (c *Client) GetSafeBlockHeader(ctx context.Context) (*types.Header, error) 
 		return nil, err
 	}
 
-	RPCMethodDuration("eth_getBlockByNumber", time.Since(start))
 	return header, nil
 }
 
@@ -120,6 +130,9 @@ func (c *Client) GetSafeBlockHeader(ctx context.Context) (*types.Header, error) 
 func (c *Client) BatchGetLogs(ctx context.Context, queries []ethereum.FilterQuery) ([][]types.Log, error) {
 	start := time.Now()
 	RPCMethodInc("eth_getLogs_batch")
+	defer func() {
+		RPCMethodDuration("eth_getLogs_batch", time.Since(start))
+	}()
 
 	batch := make([]rpc.BatchElem, len(queries))
 	results := make([][]types.Log, len(queries))
@@ -145,7 +158,6 @@ func (c *Client) BatchGetLogs(ctx context.Context, queries []ethereum.FilterQuer
 		}
 	}
 
-	RPCMethodDuration("eth_getLogs_batch", time.Since(start))
 	return results, nil
 }
 
@@ -156,6 +168,9 @@ func (c *Client) BatchGetBlockHeaders(ctx context.Context, blockNums []uint64) (
 
 	start := time.Now()
 	RPCMethodInc("eth_getBlockByNumber_batch")
+	defer func() {
+		RPCMethodDuration("eth_getBlockByNumber_batch", time.Since(start))
+	}()
 
 	for i := 0; i < len(blockNums); i += maxBatch {
 		end := min(i+maxBatch, len(blockNums))
@@ -188,7 +203,6 @@ func (c *Client) BatchGetBlockHeaders(ctx context.Context, blockNums []uint64) (
 		allResults = append(allResults, results...)
 	}
 
-	RPCMethodDuration("eth_getBlockByNumber_batch", time.Since(start))
 	return allResults, nil
 }
 

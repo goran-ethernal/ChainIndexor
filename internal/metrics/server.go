@@ -14,14 +14,12 @@ import (
 type Server struct {
 	config *config.MetricsConfig
 	server *http.Server
-	stopCh chan struct{}
 }
 
 // NewServer creates a new metrics server.
 func NewServer(config *config.MetricsConfig) *Server {
 	return &Server{
 		config: config,
-		stopCh: make(chan struct{}),
 	}
 }
 
@@ -71,8 +69,6 @@ func (s *Server) Stop(ctx context.Context) error {
 		return nil
 	}
 
-	close(s.stopCh)
-
 	if err := s.server.Shutdown(ctx); err != nil {
 		return fmt.Errorf("failed to shutdown metrics server: %w", err)
 	}
@@ -90,10 +86,7 @@ func (s *Server) updateSystemMetrics(ctx context.Context) {
 		case <-ticker.C:
 			UpdateSystemMetrics()
 		case <-ctx.Done():
-			// Context cancelled, before stop
-			return
-		case <-s.stopCh:
-			// stop called before context cancelled
+			// Context cancelled before stop
 			return
 		}
 	}

@@ -82,7 +82,7 @@ import "github.com/goran-ethernal/ChainIndexor/internal/fetcher"
 fetcher.FinalizedBlockLogSet(12350)
 ```
 
-### RPC Metrics (5 metrics)
+### RPC Metrics (3 metrics)
 
 **Package**: `internal/rpc`
 
@@ -216,14 +216,13 @@ store.RetentionBlocksPrunedInc("logs", 1000)
 store.RetentionLogsPrunedInc("logs", 50000)
 ```
 
-### System Metrics (5 metrics)
+### System Metrics (4 metrics)
 
 **Package**: `internal/metrics`
 
 | Metric | Type | Labels | Description |
 | ------ | ---- | ------ | ----------- |
 | `chainindexor_uptime_seconds` | Gauge | - | Application uptime in seconds |
-| `chainindexor_errors_total` | Counter | component, severity | Total number of errors by component and severity |
 | `chainindexor_component_health` | Gauge | component | Component health status (1=healthy, 0=unhealthy) |
 | `chainindexor_goroutines` | Gauge | - | Number of active goroutines |
 | `chainindexor_memory_usage_bytes` | Gauge | type | Memory usage statistics (alloc, total_alloc, sys, heap_inuse) |
@@ -236,9 +235,6 @@ import "github.com/goran-ethernal/ChainIndexor/internal/metrics"
 // Update system metrics (automatically called every 15 seconds)
 metrics.UpdateSystemMetrics()
 
-// Track errors
-metrics.Errors.WithLabelValues("downloader", "error").Inc()
-
 // Update component health
 metrics.ComponentHealthSet("downloader", true)  // healthy
 metrics.ComponentHealthSet("logstore", false)   // unhealthy
@@ -246,16 +242,16 @@ metrics.ComponentHealthSet("logstore", false)   // unhealthy
 
 ## Metrics Summary
 
-**Total: 33 metrics** across 7 categories
+**Total: 30 metrics** across 7 categories
 
 - **Indexing**: 5 metrics (blocks processed, logs indexed, processing time, rate)
 - **Finalized Block**: 1 metric (current finalized block)
-- **RPC**: 5 metrics (requests, errors, duration, connections, retries)
+- **RPC**: 3 metrics (requests, errors, duration)
 - **Database**: 4 metrics (queries, query duration, errors, size)
 - **Maintenance**: 7 metrics (runs, outcomes, duration, last run, space reclaimed, WAL, vacuum)
 - **Reorg**: 4 metrics (detected, depth, last detected, from block)
 - **Retention**: 2 metrics (blocks pruned, logs pruned)
-- **System**: 5 metrics (uptime, errors, component health, goroutines, memory)
+- **System**: 5 metrics (uptime, component health, goroutines, memory)
 
 ## Accessing Metrics
 
@@ -353,9 +349,6 @@ chainindexor_memory_usage_bytes{type="heap_inuse"}
 # Goroutine count
 chainindexor_goroutines
 
-# Error rate by component
-rate(chainindexor_errors_total[5m])
-
 # Application uptime
 chainindexor_uptime_seconds
 ```
@@ -432,7 +425,6 @@ You can create a Grafana dashboard using these metrics. Recommended panels:
 
 ### Errors & Health Dashboard
 
-- **Error rate by component** (stacked area chart)
 - **RPC errors** breakdown by type
 - **Database errors** tracking
 - **Component health** heatmap

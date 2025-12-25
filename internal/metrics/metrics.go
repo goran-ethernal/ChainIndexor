@@ -36,7 +36,7 @@ var (
 	)
 
 	// Indexing metrics
-	LastIndexedBlock = promauto.NewGaugeVec(
+	lastIndexedBlock = promauto.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Name: "chainindexor_last_indexed_block",
 			Help: "The last block number successfully indexed",
@@ -44,7 +44,7 @@ var (
 		[]string{"indexer"},
 	)
 
-	BlocksProcessed = promauto.NewCounterVec(
+	blocksProcessed = promauto.NewCounterVec(
 		prometheus.CounterOpts{
 			Name: "chainindexor_blocks_processed_total",
 			Help: "Total number of blocks processed",
@@ -52,7 +52,7 @@ var (
 		[]string{"indexer"},
 	)
 
-	LogsIndexed = promauto.NewCounterVec(
+	logsIndexed = promauto.NewCounterVec(
 		prometheus.CounterOpts{
 			Name: "chainindexor_logs_indexed_total",
 			Help: "Total number of logs indexed",
@@ -60,7 +60,7 @@ var (
 		[]string{"indexer"},
 	)
 
-	BlockProcessingTime = promauto.NewHistogramVec(
+	blockProcessingTime = promauto.NewHistogramVec(
 		prometheus.HistogramOpts{
 			Name:    "chainindexor_block_processing_duration_seconds",
 			Help:    "Time taken to process a batch of blocks",
@@ -69,7 +69,7 @@ var (
 		[]string{"indexer"},
 	)
 
-	IndexingRate = promauto.NewGaugeVec(
+	indexingRate = promauto.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Name: "chainindexor_indexing_rate_blocks_per_second",
 			Help: "Current indexing rate in blocks per second",
@@ -78,22 +78,14 @@ var (
 	)
 
 	// System metrics
-	Uptime = promauto.NewGauge(
+	uptime = promauto.NewGauge(
 		prometheus.GaugeOpts{
 			Name: "chainindexor_uptime_seconds",
 			Help: "Application uptime in seconds",
 		},
 	)
 
-	Errors = promauto.NewCounterVec(
-		prometheus.CounterOpts{
-			Name: "chainindexor_errors_total",
-			Help: "Total number of errors by component and severity",
-		},
-		[]string{"component", "severity"},
-	)
-
-	ComponentHealth = promauto.NewGaugeVec(
+	componentHealth = promauto.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Name: "chainindexor_component_health",
 			Help: "Component health status (1=healthy, 0=unhealthy)",
@@ -101,14 +93,14 @@ var (
 		[]string{"component"},
 	)
 
-	Goroutines = promauto.NewGauge(
+	goroutines = promauto.NewGauge(
 		prometheus.GaugeOpts{
 			Name: "chainindexor_goroutines",
 			Help: "Number of active goroutines",
 		},
 	)
 
-	MemoryUsage = promauto.NewGaugeVec(
+	memoryUsage = promauto.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Name: "chainindexor_memory_usage_bytes",
 			Help: "Memory usage statistics",
@@ -132,23 +124,23 @@ func DBErrorsInc(db string, errorType string) {
 }
 
 func BlockProcessingTimeLog(indexer string, duration time.Duration) {
-	BlockProcessingTime.WithLabelValues(indexer).Observe(duration.Seconds())
+	blockProcessingTime.WithLabelValues(indexer).Observe(duration.Seconds())
 }
 
 func LastIndexedBlockInc(indexer string, blockNum uint64) {
-	LastIndexedBlock.WithLabelValues(indexer).Set(float64(blockNum))
+	lastIndexedBlock.WithLabelValues(indexer).Set(float64(blockNum))
 }
 
 func BlocksProcessedInc(indexer string, count uint64) {
-	BlocksProcessed.WithLabelValues(indexer).Add(float64(count))
+	blocksProcessed.WithLabelValues(indexer).Add(float64(count))
 }
 
 func LogsIndexedInc(indexer string, count int) {
-	LogsIndexed.WithLabelValues(indexer).Add(float64(count))
+	logsIndexed.WithLabelValues(indexer).Add(float64(count))
 }
 
 func IndexingRateLog(indexer string, rate float64) {
-	IndexingRate.WithLabelValues(indexer).Set(rate)
+	indexingRate.WithLabelValues(indexer).Set(rate)
 }
 
 func ComponentHealthSet(component string, healthy bool) {
@@ -157,23 +149,23 @@ func ComponentHealthSet(component string, healthy bool) {
 		boolAsFloat = 0
 	}
 
-	ComponentHealth.WithLabelValues(component).Set(boolAsFloat)
+	componentHealth.WithLabelValues(component).Set(boolAsFloat)
 }
 
 // UpdateSystemMetrics updates runtime system metrics.
 // This should be called periodically (e.g., every 15 seconds).
 func UpdateSystemMetrics() {
 	// Update uptime
-	Uptime.Set(time.Since(startTime).Seconds())
+	uptime.Set(time.Since(startTime).Seconds())
 
 	// Update goroutine count
-	Goroutines.Set(float64(runtime.NumGoroutine()))
+	goroutines.Set(float64(runtime.NumGoroutine()))
 
 	// Update memory statistics
 	var m runtime.MemStats
 	runtime.ReadMemStats(&m)
-	MemoryUsage.WithLabelValues("alloc").Set(float64(m.Alloc))
-	MemoryUsage.WithLabelValues("total_alloc").Set(float64(m.TotalAlloc))
-	MemoryUsage.WithLabelValues("sys").Set(float64(m.Sys))
-	MemoryUsage.WithLabelValues("heap_inuse").Set(float64(m.HeapInuse))
+	memoryUsage.WithLabelValues("alloc").Set(float64(m.Alloc))
+	memoryUsage.WithLabelValues("total_alloc").Set(float64(m.TotalAlloc))
+	memoryUsage.WithLabelValues("sys").Set(float64(m.Sys))
+	memoryUsage.WithLabelValues("heap_inuse").Set(float64(m.HeapInuse))
 }
