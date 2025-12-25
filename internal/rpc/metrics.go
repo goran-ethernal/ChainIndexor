@@ -33,14 +33,6 @@ var (
 		},
 		[]string{"method"},
 	)
-
-	RPCRetries = promauto.NewCounterVec(
-		prometheus.CounterOpts{
-			Name: "chainindexor_rpc_retries_total",
-			Help: "Total number of RPC request retries",
-		},
-		[]string{"method"},
-	)
 )
 
 func RPCMethodInc(method string) {

@@ -91,7 +91,6 @@ fetcher.FinalizedBlockLogSet(12350)
 | `chainindexor_rpc_requests_total` | Counter | method | Total number of RPC requests by method |
 | `chainindexor_rpc_errors_total` | Counter | method, error_type | Total number of RPC errors by method and type |
 | `chainindexor_rpc_request_duration_seconds` | Histogram | method | Duration of RPC requests |
-| `chainindexor_rpc_retries_total` | Counter | method | Total number of RPC request retries |
 
 **Usage**:
 
@@ -106,9 +105,6 @@ rpc.RPCMethodError("eth_getLogs", "timeout")
 
 // Measure RPC duration
 rpc.RPCMethodDuration("eth_getLogs", duration)
-
-// Direct access to metrics
-rpc.RPCRetries.WithLabelValues("eth_getLogs").Inc()
 ```
 
 ### Database Metrics (4 metrics)
@@ -310,9 +306,6 @@ sum by (method) (rate(chainindexor_rpc_requests_total[5m]))
 # Average RPC latency
 rate(chainindexor_rpc_request_duration_seconds_sum[5m]) / 
 rate(chainindexor_rpc_request_duration_seconds_count[5m])
-
-# Active connections
-chainindexor_rpc_connections_active
 ```
 
 ### Monitor Database
