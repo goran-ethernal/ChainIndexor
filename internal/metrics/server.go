@@ -39,16 +39,16 @@ func (s *Server) Start(ctx context.Context) error {
 	// Add health check endpoint
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("OK"))
+		_, _ = w.Write([]byte("OK"))
 	})
 
 	s.server = &http.Server{
 		Addr:              s.config.ListenAddress,
 		Handler:           mux,
-		ReadHeaderTimeout: 5 * time.Second,
-		ReadTimeout:       10 * time.Second,
-		WriteTimeout:      10 * time.Second,
-		IdleTimeout:       60 * time.Second,
+		ReadHeaderTimeout: 5 * time.Second,  //nolint:mnd
+		ReadTimeout:       10 * time.Second, //nolint:mnd
+		WriteTimeout:      10 * time.Second, //nolint:mnd
+		IdleTimeout:       60 * time.Second, //nolint:mnd
 	}
 
 	// Start system metrics updater
@@ -82,7 +82,7 @@ func (s *Server) Stop(ctx context.Context) error {
 
 // updateSystemMetrics periodically updates system-level metrics.
 func (s *Server) updateSystemMetrics(ctx context.Context) {
-	ticker := time.NewTicker(15 * time.Second)
+	ticker := time.NewTicker(15 * time.Second) //nolint:mnd
 	defer ticker.Stop()
 
 	for {
