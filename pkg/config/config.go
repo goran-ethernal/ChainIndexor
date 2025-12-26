@@ -98,7 +98,7 @@ func (r *RetryConfig) ApplyDefaults() {
 		r.InitialBackoff = common.NewDuration(1 * time.Second)
 	}
 	if r.MaxBackoff.Duration == 0 {
-		r.MaxBackoff = common.NewDuration(30 * time.Second)
+		r.MaxBackoff = common.NewDuration(30 * time.Second) //nolint:mnd
 	}
 	if r.BackoffMultiplier == 0 {
 		r.BackoffMultiplier = 2.0
@@ -191,7 +191,7 @@ type MaintenanceConfig struct {
 // ApplyDefaults sets default values for optional maintenance configuration fields.
 func (m *MaintenanceConfig) ApplyDefaults() {
 	if m.CheckInterval.Duration == 0 {
-		m.CheckInterval = common.NewDuration(30 * time.Minute)
+		m.CheckInterval = common.NewDuration(30 * time.Minute) //nolint:mnd
 	}
 	if m.WALCheckpointMode == "" {
 		m.WALCheckpointMode = "TRUNCATE"

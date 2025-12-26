@@ -2,10 +2,11 @@ package rpc
 
 import (
 	"context"
+	"crypto/rand"
 	"errors"
 	"fmt"
 	"math"
-	"math/rand"
+	"math/big"
 	"net"
 	"strings"
 	"syscall"
@@ -75,7 +76,7 @@ func calculateBackoff(attempt int, cfg *config.RetryConfig) time.Duration {
 	}
 
 	// Calculate exponential backoff
-	backoff := float64(cfg.InitialBackoff.Duration) * math.Pow(cfg.BackoffMultiplier, float64(attempt-2))
+	backoff := float64(cfg.InitialBackoff.Duration) * math.Pow(cfg.BackoffMultiplier, float64(attempt-2)) //nolint:mnd
 
 	// Cap at max backoff
 	if backoff > float64(cfg.MaxBackoff.Duration) {
@@ -83,8 +84,15 @@ func calculateBackoff(attempt int, cfg *config.RetryConfig) time.Duration {
 	}
 
 	// Add jitter (±25%)
-	jitterRange := backoff * 0.25
-	jitter := (rand.Float64() * 2 * jitterRange) - jitterRange
+	jitterRange := backoff * 0.25 //nolint:mnd
+	// Use crypto/rand for secure random jitter
+	randomBig, err := rand.Int(rand.Reader, big.NewInt(10000)) //nolint:mnd
+	if err != nil {
+		// Fallback to no jitter if random generation fails
+		randomBig = big.NewInt(5000) //nolint:mnd
+	}
+	randomFactor := float64(randomBig.Int64()) / 10000.0 //nolint:mnd // 0.0 to 1.0
+	jitter := (randomFactor * 2 * jitterRange) - jitterRange
 	backoff += jitter
 
 	// Ensure non-negative
