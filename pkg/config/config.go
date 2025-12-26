@@ -105,6 +105,27 @@ func (r *RetryConfig) ApplyDefaults() {
 	}
 }
 
+// Validate checks if the retry configuration is valid.
+func (r *RetryConfig) Validate() error {
+	if r.MaxAttempts < 0 {
+		return fmt.Errorf("retry config: max_attempts must be positive, got %d", r.MaxAttempts)
+	}
+
+	if r.InitialBackoff.Duration <= 0 {
+		return fmt.Errorf("retry config: initial_backoff must be positive, got %v", r.InitialBackoff.Duration)
+	}
+
+	if r.MaxBackoff.Duration <= 0 {
+		return fmt.Errorf("retry config: max_backoff must be positive, got %v", r.MaxBackoff.Duration)
+	}
+
+	if r.BackoffMultiplier < 1.0 {
+		return fmt.Errorf("backoff_multiplier must be at least 1.0, got %f", r.BackoffMultiplier)
+	}
+
+	return nil
+}
+
 // DatabaseConfig represents database configuration.
 type DatabaseConfig struct {
 	// Path is the file path to the SQLite database
@@ -409,6 +430,12 @@ func (c *Config) Validate() error {
 	if c.Downloader.Maintenance != nil {
 		if err := c.Downloader.Maintenance.Validate(); err != nil {
 			return fmt.Errorf("downloader.maintenance: %w", err)
+		}
+	}
+
+	if c.Downloader.Retry != nil {
+		if err := c.Downloader.Retry.Validate(); err != nil {
+			return fmt.Errorf("downloader.retry: %w", err)
 		}
 	}
 

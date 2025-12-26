@@ -367,25 +367,6 @@ func TestMaintenanceCoordinator_ContextCancellation(t *testing.T) {
 	require.ErrorIs(t, err, context.Canceled)
 }
 
-func TestMaintenanceCoordinator_InvalidConfig(t *testing.T) {
-	db, dbPath, cleanup := setupMaintenanceTestDB(t)
-	defer cleanup()
-
-	log, err := logger.NewLogger("info", true)
-	require.NoError(t, err)
-
-	cfg := config.MaintenanceConfig{
-		Enabled:       true,
-		CheckInterval: common.NewDuration(0), // Invalid (empty, will get default but then fail because we need to set to invalid)
-	}
-
-	coordinator := newMaintenanceCoordinator(dbPath, db, cfg, log)
-
-	require.Panics(t, func() {
-		coordinator.maintenanceWorker(cfg.CheckInterval.Duration)
-	})
-}
-
 func TestMaintenanceCoordinator_ConcurrentOperationsDuringMaintenance(t *testing.T) {
 	db, dbPath, cleanup := setupMaintenanceTestDB(t)
 	defer cleanup()

@@ -8,7 +8,12 @@ import (
 
 // Duration is a wrapper type that parses time duration from text.
 type Duration struct {
-	time.Duration `validate:"required"`
+	time.Duration
+}
+
+// MarshalText marshalls time duration to text.
+func (d Duration) MarshalText() ([]byte, error) {
+	return []byte(d.Duration.String()), nil
 }
 
 // UnmarshalText unmarshalls time duration from text.
