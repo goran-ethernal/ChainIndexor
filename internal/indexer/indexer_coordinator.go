@@ -2,6 +2,7 @@ package indexer
 
 import (
 	"fmt"
+	"runtime"
 	"sync"
 	"time"
 
@@ -105,6 +106,8 @@ func (ic *IndexerCoordinator) HandleLogs(logs []types.Log, from, to uint64) erro
 
 	// Call HandleLogs for each indexer with their relevant logs concurrently
 	var g errgroup.Group
+	g.SetLimit(runtime.NumCPU() * 2) // limit concurrency
+
 	for idx, relevantLogs := range indexerLogs {
 		// Capture loop variables
 		indexer := idx

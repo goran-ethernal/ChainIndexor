@@ -21,6 +21,12 @@ chunk_size = 5000
 finality = "finalized"
 finalized_lag = 12
 
+[downloader.retry]
+max_attempts = 5
+initial_backoff = "1s"
+max_backoff = "30s"
+backoff_multiplier = 2.0
+
 [downloader.db]
 path = "./data/downloader.sqlite"
 journal_mode = "WAL"

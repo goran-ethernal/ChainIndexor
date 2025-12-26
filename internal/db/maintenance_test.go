@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/goran-ethernal/ChainIndexor/internal/common"
 	"github.com/goran-ethernal/ChainIndexor/internal/logger"
 	"github.com/goran-ethernal/ChainIndexor/pkg/config"
 	"github.com/stretchr/testify/require"
@@ -63,7 +64,7 @@ func TestMaintenanceCoordinator_NewMaintenanceCoordinator(t *testing.T) {
 
 	cfg := config.MaintenanceConfig{
 		Enabled:           true,
-		CheckInterval:     "1m",
+		CheckInterval:     common.NewDuration(1 * time.Minute),
 		VacuumOnStartup:   false,
 		WALCheckpointMode: "TRUNCATE",
 	}
@@ -251,7 +252,7 @@ func TestMaintenanceCoordinator_BackgroundMaintenance(t *testing.T) {
 
 	cfg := config.MaintenanceConfig{
 		Enabled:           true,
-		CheckInterval:     "100ms", // Fast interval for testing
+		CheckInterval:     common.NewDuration(100 * time.Millisecond), // Fast interval for testing
 		VacuumOnStartup:   false,
 		WALCheckpointMode: "PASSIVE",
 	}
@@ -295,7 +296,7 @@ func TestMaintenanceCoordinator_StartupMaintenance(t *testing.T) {
 
 	cfg := config.MaintenanceConfig{
 		Enabled:           true,
-		CheckInterval:     "1h", // Long interval so it doesn't run during test
+		CheckInterval:     common.NewDuration(1 * time.Hour), // Long interval so it doesn't run during test
 		VacuumOnStartup:   true,
 		WALCheckpointMode: "TRUNCATE",
 	}
@@ -325,7 +326,7 @@ func TestMaintenanceCoordinator_DisabledMaintenance(t *testing.T) {
 
 	cfg := config.MaintenanceConfig{
 		Enabled:           false,
-		CheckInterval:     "100ms",
+		CheckInterval:     common.NewDuration(100 * time.Millisecond),
 		WALCheckpointMode: "TRUNCATE",
 	}
 
@@ -375,15 +376,14 @@ func TestMaintenanceCoordinator_InvalidConfig(t *testing.T) {
 
 	cfg := config.MaintenanceConfig{
 		Enabled:       true,
-		CheckInterval: "", // Invalid (empty, will get default but then fail because we need to set to invalid)
+		CheckInterval: common.NewDuration(0), // Invalid (empty, will get default but then fail because we need to set to invalid)
 	}
-	// Override default to test invalid case
-	cfg.CheckInterval = "invalid"
 
 	coordinator := newMaintenanceCoordinator(dbPath, db, cfg, log)
 
-	err = coordinator.Start(t.Context())
-	require.Error(t, err, "Should fail with invalid check interval")
+	require.Panics(t, func() {
+		coordinator.maintenanceWorker(cfg.CheckInterval.Duration)
+	})
 }
 
 func TestMaintenanceCoordinator_ConcurrentOperationsDuringMaintenance(t *testing.T) {

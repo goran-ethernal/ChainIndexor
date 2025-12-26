@@ -117,12 +117,6 @@ func (m *MaintenanceCoordinator) Start(ctx context.Context) error {
 		return nil
 	}
 
-	// Parse check interval
-	checkInterval, err := m.config.ParsedCheckInterval()
-	if err != nil {
-		return fmt.Errorf("invalid check_interval: %w", err)
-	}
-
 	m.maintenanceCtx, m.maintenanceCancel = context.WithCancel(ctx)
 
 	// Run initial maintenance if configured
@@ -135,10 +129,10 @@ func (m *MaintenanceCoordinator) Start(ctx context.Context) error {
 
 	// Start background worker
 	m.maintenanceWg.Add(1)
-	go m.maintenanceWorker(checkInterval)
+	go m.maintenanceWorker(m.config.CheckInterval.Duration)
 
 	m.log.Infof("Background maintenance started - interval: %v, checkpoint mode: %s",
-		checkInterval, m.config.WALCheckpointMode)
+		m.config.CheckInterval.Duration, m.config.WALCheckpointMode)
 
 	return nil
 }
