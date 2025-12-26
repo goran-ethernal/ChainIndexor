@@ -33,7 +33,7 @@ func TestRun(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 
-	ethClient, err := rpc.NewClient(ctx, cfg.Downloader.RPCURL) // Example RPC URL
+	ethClient, err := rpc.NewClient(ctx, cfg.Downloader.RPCURL, cfg.Downloader.Retry) // Example RPC URL
 	if err != nil {
 		t.Fatalf("failed to create RPC client: %v", err)
 	}

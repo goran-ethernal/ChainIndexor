@@ -82,7 +82,7 @@ import "github.com/goran-ethernal/ChainIndexor/internal/fetcher"
 fetcher.FinalizedBlockLogSet(12350)
 ```
 
-### RPC Metrics (3 metrics)
+### RPC Metrics (4 metrics)
 
 **Package**: `internal/rpc`
 
@@ -91,6 +91,7 @@ fetcher.FinalizedBlockLogSet(12350)
 | `chainindexor_rpc_requests_total` | Counter | method | Total number of RPC requests by method |
 | `chainindexor_rpc_errors_total` | Counter | method, error_type | Total number of RPC errors by method and type |
 | `chainindexor_rpc_request_duration_seconds` | Histogram | method | Duration of RPC requests |
+| `chainindexor_rpc_retries_total` | Counter | method | Total number of RPC retries by method |
 
 **Usage**:
 
@@ -105,6 +106,9 @@ rpc.RPCMethodError("eth_getLogs", "timeout")
 
 // Measure RPC duration
 rpc.RPCMethodDuration("eth_getLogs", duration)
+
+// Track retry attempts
+rpc.RPCRetryInc("eth_getLogs")
 ```
 
 ### Database Metrics (4 metrics)
@@ -242,11 +246,11 @@ metrics.ComponentHealthSet("logstore", false)   // unhealthy
 
 ## Metrics Summary
 
-**Total: 30 metrics** across 7 categories
+**Total: 31 metrics** across 7 categories
 
 - **Indexing**: 5 metrics (blocks processed, logs indexed, processing time, rate)
 - **Finalized Block**: 1 metric (current finalized block)
-- **RPC**: 3 metrics (requests, errors, duration)
+- **RPC**: 4 metrics (requests, errors, duration, retries)
 - **Database**: 4 metrics (queries, query duration, errors, size)
 - **Maintenance**: 7 metrics (runs, outcomes, duration, last run, space reclaimed, WAL, vacuum)
 - **Reorg**: 4 metrics (detected, depth, last detected, from block)

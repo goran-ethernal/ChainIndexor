@@ -10,6 +10,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/ethereum/go-ethereum/rpc"
+	"github.com/goran-ethernal/ChainIndexor/pkg/config"
 	pkgrpc "github.com/goran-ethernal/ChainIndexor/pkg/rpc"
 )
 
@@ -19,20 +20,22 @@ var _ pkgrpc.EthClient = (*Client)(nil)
 // Client wraps the Ethereum RPC client with convenience methods for indexing.
 // It implements the pkgrpc.EthClient interface.
 type Client struct {
-	eth *ethclient.Client
-	rpc *rpc.Client
+	eth         *ethclient.Client
+	rpc         *rpc.Client
+	retryConfig *config.RetryConfig
 }
 
 // NewClient creates a new RPC client connected to the given endpoint.
-func NewClient(ctx context.Context, endpoint string) (*Client, error) {
+func NewClient(ctx context.Context, endpoint string, retryConfig *config.RetryConfig) (*Client, error) {
 	rpcClient, err := rpc.DialContext(ctx, endpoint)
 	if err != nil {
 		return nil, err
 	}
 
 	return &Client{
-		eth: ethclient.NewClient(rpcClient),
-		rpc: rpcClient,
+		eth:         ethclient.NewClient(rpcClient),
+		rpc:         rpcClient,
+		retryConfig: retryConfig,
 	}, nil
 }
 
@@ -49,7 +52,13 @@ func (c *Client) GetLogs(ctx context.Context, query ethereum.FilterQuery) ([]typ
 		RPCMethodDuration("eth_getLogs", time.Since(start))
 	}()
 
-	logs, err := c.eth.FilterLogs(ctx, query)
+	var logs []types.Log
+	err := retryWithBackoff(ctx, c.retryConfig, "eth_getLogs", func() error {
+		var fetchErr error
+		logs, fetchErr = c.eth.FilterLogs(ctx, query)
+		return fetchErr
+	})
+
 	if err != nil {
 		RPCMethodError("eth_getLogs", "error")
 		return nil, err
@@ -66,7 +75,13 @@ func (c *Client) GetBlockHeader(ctx context.Context, blockNum uint64) (*types.He
 		RPCMethodDuration("eth_getBlockByNumber", time.Since(start))
 	}()
 
-	header, err := c.eth.HeaderByNumber(ctx, big.NewInt(int64(blockNum)))
+	var header *types.Header
+	err := retryWithBackoff(ctx, c.retryConfig, "eth_getBlockByNumber", func() error {
+		var fetchErr error
+		header, fetchErr = c.eth.HeaderByNumber(ctx, big.NewInt(int64(blockNum)))
+		return fetchErr
+	})
+
 	if err != nil {
 		RPCMethodError("eth_getBlockByNumber", "error")
 		return nil, err
@@ -83,7 +98,13 @@ func (c *Client) GetLatestBlockHeader(ctx context.Context) (*types.Header, error
 		RPCMethodDuration("eth_getBlockByNumber", time.Since(start))
 	}()
 
-	header, err := c.eth.HeaderByNumber(ctx, nil)
+	var header *types.Header
+	err := retryWithBackoff(ctx, c.retryConfig, "eth_getBlockByNumber", func() error {
+		var fetchErr error
+		header, fetchErr = c.eth.HeaderByNumber(ctx, nil)
+		return fetchErr
+	})
+
 	if err != nil {
 		RPCMethodError("eth_getBlockByNumber", "error")
 		return nil, err
@@ -100,7 +121,13 @@ func (c *Client) GetFinalizedBlockHeader(ctx context.Context) (*types.Header, er
 		RPCMethodDuration("eth_getBlockByNumber", time.Since(start))
 	}()
 
-	header, err := c.eth.HeaderByNumber(ctx, big.NewInt(int64(rpc.FinalizedBlockNumber)))
+	var header *types.Header
+	err := retryWithBackoff(ctx, c.retryConfig, "eth_getBlockByNumber", func() error {
+		var fetchErr error
+		header, fetchErr = c.eth.HeaderByNumber(ctx, big.NewInt(int64(rpc.FinalizedBlockNumber)))
+		return fetchErr
+	})
+
 	if err != nil {
 		RPCMethodError("eth_getBlockByNumber", "error")
 		return nil, err
@@ -117,7 +144,13 @@ func (c *Client) GetSafeBlockHeader(ctx context.Context) (*types.Header, error) 
 		RPCMethodDuration("eth_getBlockByNumber", time.Since(start))
 	}()
 
-	header, err := c.eth.HeaderByNumber(ctx, big.NewInt(int64(rpc.SafeBlockNumber)))
+	var header *types.Header
+	err := retryWithBackoff(ctx, c.retryConfig, "eth_getBlockByNumber", func() error {
+		var fetchErr error
+		header, fetchErr = c.eth.HeaderByNumber(ctx, big.NewInt(int64(rpc.SafeBlockNumber)))
+		return fetchErr
+	})
+
 	if err != nil {
 		RPCMethodError("eth_getBlockByNumber", "error")
 		return nil, err
@@ -134,28 +167,36 @@ func (c *Client) BatchGetLogs(ctx context.Context, queries []ethereum.FilterQuer
 		RPCMethodDuration("eth_getLogs_batch", time.Since(start))
 	}()
 
-	batch := make([]rpc.BatchElem, len(queries))
-	results := make([][]types.Log, len(queries))
+	var results [][]types.Log
+	err := retryWithBackoff(ctx, c.retryConfig, "eth_getLogs_batch", func() error {
+		batch := make([]rpc.BatchElem, len(queries))
+		results = make([][]types.Log, len(queries))
 
-	for i, query := range queries {
-		batch[i] = rpc.BatchElem{
-			Method: "eth_getLogs",
-			Args:   []any{toFilterArg(query)},
-			Result: &results[i],
+		for i, query := range queries {
+			batch[i] = rpc.BatchElem{
+				Method: "eth_getLogs",
+				Args:   []any{toFilterArg(query)},
+				Result: &results[i],
+			}
 		}
-	}
 
-	if err := c.rpc.BatchCallContext(ctx, batch); err != nil {
+		if err := c.rpc.BatchCallContext(ctx, batch); err != nil {
+			return err
+		}
+
+		// Check for individual errors
+		for _, elem := range batch {
+			if elem.Error != nil {
+				return elem.Error
+			}
+		}
+
+		return nil
+	})
+
+	if err != nil {
 		RPCMethodError("eth_getLogs_batch", "error")
 		return nil, err
-	}
-
-	// Check for individual errors
-	for _, elem := range batch {
-		if elem.Error != nil {
-			RPCMethodError("eth_getLogs_batch", "batch_element_error")
-			return nil, elem.Error
-		}
 	}
 
 	return results, nil
@@ -176,31 +217,39 @@ func (c *Client) BatchGetBlockHeaders(ctx context.Context, blockNums []uint64) (
 		end := min(i+maxBatch, len(blockNums))
 		chunk := blockNums[i:end]
 
-		batch := make([]rpc.BatchElem, len(chunk))
-		results := make([]*types.Header, len(chunk))
+		var chunkResults []*types.Header
+		err := retryWithBackoff(ctx, c.retryConfig, "eth_getBlockByNumber_batch", func() error {
+			batch := make([]rpc.BatchElem, len(chunk))
+			chunkResults = make([]*types.Header, len(chunk))
 
-		for j, blockNum := range chunk {
-			batch[j] = rpc.BatchElem{
-				Method: "eth_getBlockByNumber",
-				Args:   []any{toBlockNumArg(blockNum), false}, // false = don't include transactions
-				Result: &results[j],
+			for j, blockNum := range chunk {
+				batch[j] = rpc.BatchElem{
+					Method: "eth_getBlockByNumber",
+					Args:   []any{toBlockNumArg(blockNum), false}, // false = don't include transactions
+					Result: &chunkResults[j],
+				}
 			}
-		}
 
-		if err := c.rpc.BatchCallContext(ctx, batch); err != nil {
+			if err := c.rpc.BatchCallContext(ctx, batch); err != nil {
+				return err
+			}
+
+			// Check for individual errors
+			for _, elem := range batch {
+				if elem.Error != nil {
+					return elem.Error
+				}
+			}
+
+			return nil
+		})
+
+		if err != nil {
 			RPCMethodError("eth_getBlockByNumber_batch", "error")
 			return nil, err
 		}
 
-		// Check for individual errors
-		for _, elem := range batch {
-			if elem.Error != nil {
-				RPCMethodError("eth_getBlockByNumber_batch", "batch_element_error")
-				return nil, elem.Error
-			}
-		}
-
-		allResults = append(allResults, results...)
+		allResults = append(allResults, chunkResults...)
 	}
 
 	return allResults, nil

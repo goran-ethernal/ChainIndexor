@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"slices"
 	"time"
 
 	"github.com/goran-ethernal/ChainIndexor/internal/common"
@@ -38,6 +39,9 @@ type DownloaderConfig struct {
 	// Only used when Finality is set to "latest"
 	FinalizedLag uint64 `yaml:"finalized_lag" json:"finalized_lag" toml:"finalized_lag"`
 
+	// Retry contains RPC retry configuration with exponential backoff
+	Retry *RetryConfig `yaml:"retry,omitempty" json:"retry,omitempty" toml:"retry,omitempty"`
+
 	// DB contains database configuration for the downloader
 	DB DatabaseConfig `yaml:"db" json:"db" toml:"db"`
 
@@ -62,8 +66,64 @@ func (d *DownloaderConfig) ApplyDefaults() {
 		d.Maintenance.ApplyDefaults()
 	}
 
+	if d.Retry != nil {
+		d.Retry.ApplyDefaults()
+	}
+
 	// Apply database defaults
 	d.DB.ApplyDefaults()
+}
+
+// RetryConfig represents RPC retry configuration with exponential backoff.
+type RetryConfig struct {
+	// MaxAttempts is the maximum number of attempts (including initial request)
+	MaxAttempts int `yaml:"max_attempts" json:"max_attempts" toml:"max_attempts"`
+
+	// InitialBackoff is the initial backoff duration before first retry
+	InitialBackoff common.Duration `yaml:"initial_backoff" json:"initial_backoff" toml:"initial_backoff"`
+
+	// MaxBackoff is the maximum backoff duration
+	MaxBackoff common.Duration `yaml:"max_backoff" json:"max_backoff" toml:"max_backoff"`
+
+	// BackoffMultiplier is the multiplier for exponential backoff
+	BackoffMultiplier float64 `yaml:"backoff_multiplier" json:"backoff_multiplier" toml:"backoff_multiplier"`
+}
+
+// ApplyDefaults sets default values for retry configuration.
+func (r *RetryConfig) ApplyDefaults() {
+	if r.MaxAttempts == 0 {
+		r.MaxAttempts = 5
+	}
+	if r.InitialBackoff.Duration == 0 {
+		r.InitialBackoff = common.NewDuration(1 * time.Second)
+	}
+	if r.MaxBackoff.Duration == 0 {
+		r.MaxBackoff = common.NewDuration(30 * time.Second) //nolint:mnd
+	}
+	if r.BackoffMultiplier == 0 {
+		r.BackoffMultiplier = 2.0
+	}
+}
+
+// Validate checks if the retry configuration is valid.
+func (r *RetryConfig) Validate() error {
+	if r.MaxAttempts < 0 {
+		return fmt.Errorf("retry config: max_attempts must be positive, got %d", r.MaxAttempts)
+	}
+
+	if r.InitialBackoff.Duration <= 0 {
+		return fmt.Errorf("retry config: initial_backoff must be positive, got %v", r.InitialBackoff.Duration)
+	}
+
+	if r.MaxBackoff.Duration <= 0 {
+		return fmt.Errorf("retry config: max_backoff must be positive, got %v", r.MaxBackoff.Duration)
+	}
+
+	if r.BackoffMultiplier < 1.0 {
+		return fmt.Errorf("backoff_multiplier must be at least 1.0, got %f", r.BackoffMultiplier)
+	}
+
+	return nil
 }
 
 // DatabaseConfig represents database configuration.
@@ -138,7 +198,7 @@ type MaintenanceConfig struct {
 	Enabled bool `yaml:"enabled" json:"enabled" toml:"enabled"`
 
 	// CheckInterval is how often to run maintenance (e.g., "30m", "1h")
-	CheckInterval string `yaml:"check_interval" json:"check_interval" toml:"check_interval"`
+	CheckInterval common.Duration `yaml:"check_interval" json:"check_interval" toml:"check_interval"`
 
 	// VacuumOnStartup runs maintenance immediately on startup
 	VacuumOnStartup bool `yaml:"vacuum_on_startup" json:"vacuum_on_startup" toml:"vacuum_on_startup"`
@@ -151,8 +211,8 @@ type MaintenanceConfig struct {
 
 // ApplyDefaults sets default values for optional maintenance configuration fields.
 func (m *MaintenanceConfig) ApplyDefaults() {
-	if m.CheckInterval == "" {
-		m.CheckInterval = "30m"
+	if m.CheckInterval.Duration == 0 {
+		m.CheckInterval = common.NewDuration(30 * time.Minute) //nolint:mnd
 	}
 	if m.WALCheckpointMode == "" {
 		m.WALCheckpointMode = "TRUNCATE"
@@ -163,33 +223,14 @@ func (m *MaintenanceConfig) ApplyDefaults() {
 
 // Validate checks if the maintenance configuration is valid.
 func (m *MaintenanceConfig) Validate() error {
-	if m.CheckInterval != "" {
-		// Try parsing the duration
-		if _, err := time.ParseDuration(m.CheckInterval); err != nil {
-			return fmt.Errorf("maintenance.check_interval: invalid duration format '%s'", m.CheckInterval)
-		}
-	}
-
 	if m.WALCheckpointMode != "" {
 		validModes := []string{"PASSIVE", "FULL", "RESTART", "TRUNCATE"}
-		valid := false
-		for _, mode := range validModes {
-			if m.WALCheckpointMode == mode {
-				valid = true
-				break
-			}
-		}
-		if !valid {
+		if !slices.Contains(validModes, m.WALCheckpointMode) {
 			return fmt.Errorf("maintenance.wal_checkpoint_mode: must be one of: PASSIVE, FULL, RESTART, TRUNCATE")
 		}
 	}
 
 	return nil
-}
-
-// ParsedCheckInterval returns the parsed check interval duration.
-func (m *MaintenanceConfig) ParsedCheckInterval() (time.Duration, error) {
-	return time.ParseDuration(m.CheckInterval)
 }
 
 // LoggingConfig configures logging behavior with per-component log levels.
@@ -389,6 +430,12 @@ func (c *Config) Validate() error {
 	if c.Downloader.Maintenance != nil {
 		if err := c.Downloader.Maintenance.Validate(); err != nil {
 			return fmt.Errorf("downloader.maintenance: %w", err)
+		}
+	}
+
+	if c.Downloader.Retry != nil {
+		if err := c.Downloader.Retry.Validate(); err != nil {
+			return fmt.Errorf("downloader.retry: %w", err)
 		}
 	}
 

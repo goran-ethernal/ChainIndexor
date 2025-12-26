@@ -76,8 +76,36 @@ The downloader is responsible for fetching logs from the blockchain and coordina
 | `chunk_size` | uint64 | No | 5000 | Number of blocks to fetch per `eth_getLogs` call. Adjust based on RPC limits |
 | `finality` | string | No | "finalized" | Block finality mode: `"finalized"`, `"safe"`, or `"latest"` |
 | `finalized_lag` | uint64 | No | 0 | Blocks behind head to consider finalized (only used when `finality: "latest"`) |
+| `retry` | object | No | - | Optional RPC retry configuration with exponential backoff |
 | `db` | object | Yes | - | Database configuration for the downloader |
 | `retention_policy` | object | No | - | Optional log retention policy configuration |
+
+#### Retry Configuration
+
+Optional configuration for automatic RPC retry logic with exponential backoff:
+
+| Parameter | Type | Required | Default | Description |
+| ----------- | ------ | ---------- | --------- | ------------- |
+| `max_attempts` | int | No | 5 | Maximum number of attempts (including initial request) |
+| `initial_backoff` | string | No | "1s" | Initial backoff duration before first retry (e.g., `"1s"`, `"500ms"`) |
+| `max_backoff` | string | No | "30s" | Maximum backoff duration (cap for exponential growth) |
+| `backoff_multiplier` | float | No | 2.0 | Multiplier for exponential backoff (e.g., 2.0 doubles each retry) |
+
+**How Retry Works:**
+
+- Automatically retries failed RPC requests with exponential backoff and jitter (±25%)
+- Only retries transient errors: network timeouts, connection failures, rate limits (429), server errors (502/503/504)
+- Non-retryable errors (invalid parameters, auth failures) fail immediately
+- Respects context deadlines and cancellation during retry attempts
+- Tracks retry attempts via `chainindexor_rpc_retries_total` Prometheus metric
+
+**Backoff Example** (with 1s initial, 2.0 multiplier):
+
+- Attempt 1: Immediate
+- Attempt 2: ~1s wait
+- Attempt 3: ~2s wait
+- Attempt 4: ~4s wait
+- Attempt 5: ~8s wait (capped at max_backoff)
 
 #### Database Configuration
 

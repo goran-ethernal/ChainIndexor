@@ -30,6 +30,12 @@ downloader:
   rpc_url: "https://mainnet.infura.io/v3/XXXX"
   chunk_size: 5000            # block range per eth_getLogs call
   finality: "finalized"       # "finalized", "safe", or "latest"
+  # Optional: RPC retry configuration with exponential backoff
+  retry:
+    max_attempts: 5           # maximum number of attempts (including initial request)
+    initial_backoff: 1s       # initial backoff duration before first retry
+    max_backoff: 30s          # maximum backoff duration
+    backoff_multiplier: 2.0   # multiplier for exponential backoff
   db:
     <<: *common_db
     path: "./data/downloader.sqlite"
