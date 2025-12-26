@@ -13,7 +13,7 @@ type Duration struct {
 
 // MarshalText marshalls time duration to text.
 func (d Duration) MarshalText() ([]byte, error) {
-	return []byte(d.Duration.String()), nil
+	return []byte(d.String()), nil
 }
 
 // UnmarshalText unmarshalls time duration from text.
