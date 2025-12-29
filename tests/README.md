@@ -294,7 +294,7 @@ Integration tests typically take:
 - Deep 15-block reorg: ~20-30 seconds
 - Full test suite: ~1-2 minutes
 
-Block time is set to 1 second in Anvil for faster tests.
+Anvil is run with manual mining: blocks are mined when transactions are sent or when tests explicitly call `Mine()`, which keeps tests fast and deterministic.
 
 ## Troubleshooting
 

@@ -11,7 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// NewTestDB creates a new temporary SQLite database for testing purposes,
+// NewTestDB creates a new temporary SQLite database for testing purposes
 func NewTestDB(t *testing.T, dbName string) *sql.DB {
 	t.Helper()
 

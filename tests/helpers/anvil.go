@@ -4,6 +4,7 @@ import (
 	"crypto/ecdsa"
 	"fmt"
 	"math/big"
+	"net"
 	"os"
 	"os/exec"
 	"testing"
@@ -17,16 +18,24 @@ import (
 )
 
 const (
-	// Default Anvil port
-	defaultAnvilPort = "8545"
-
 	// Anvil default private key (first account)
 	anvilPrivateKey = "ac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80"
 )
 
-var (
-	defaultAnvilURL = fmt.Sprintf("http://127.0.0.1:%s", defaultAnvilPort)
-)
+// getFreePort asks the kernel for a free open port that is ready to use
+func getFreePort(t *testing.T) int {
+	t.Helper()
+
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err, "failed to get free port")
+
+	port := listener.Addr().(*net.TCPAddr).Port
+
+	err = listener.Close()
+	require.NoError(t, err, "failed to close port listener")
+
+	return port
+}
 
 // AnvilInstance manages an Anvil test node
 type AnvilInstance struct {
@@ -42,10 +51,14 @@ type AnvilInstance struct {
 func StartAnvil(t *testing.T) *AnvilInstance {
 	t.Helper()
 
-	// Start anvil with a unique port to avoid conflicts
+	// Get a random available port
+	port := getFreePort(t)
+	anvilURL := fmt.Sprintf("http://127.0.0.1:%d", port)
+
+	// Start anvil with the allocated port
 	// No --block-time flag = no auto-mining, blocks only mined when transactions arrive
 	cmd := exec.Command("anvil",
-		"--port", defaultAnvilPort,
+		"--port", fmt.Sprintf("%d", port),
 	)
 
 	// Capture output for debugging
@@ -59,7 +72,7 @@ func StartAnvil(t *testing.T) *AnvilInstance {
 	time.Sleep(2 * time.Second)
 
 	// Connect to Anvil
-	client, err := ethclient.Dial(defaultAnvilURL)
+	client, err := ethclient.Dial(anvilURL)
 	require.NoError(t, err, "failed to connect to anvil")
 
 	// Get chain ID
@@ -76,7 +89,7 @@ func StartAnvil(t *testing.T) *AnvilInstance {
 
 	instance := &AnvilInstance{
 		cmd:        cmd,
-		URL:        defaultAnvilURL,
+		URL:        anvilURL,
 		Client:     client,
 		PrivateKey: privateKey,
 		Signer:     signer,
