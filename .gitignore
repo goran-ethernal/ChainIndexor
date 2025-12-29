@@ -39,3 +39,9 @@ go.work.sum
 *.sqlite
 *.sqlite-shm
 *.sqlite-wal
+
+# Test binaries
+*.test
+
+# Test logs
+integration-test.log
