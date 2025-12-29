@@ -509,12 +509,105 @@ go build ./...
 
 ## 🧪 Testing
 
-Run all tests and coverage:
+### Unit Tests
+
+Run all unit tests with coverage:
 
 ```bash
 make test
 make test-coverage
 ```
+
+### Integration Tests
+
+ChainIndexor includes comprehensive integration tests for reorg handling using [Anvil](https://book.getfoundry.sh/anvil/), a local Ethereum test node. Integration tests are located in the `tests/` package.
+
+#### Prerequisites
+
+Install Foundry (which includes Anvil):
+
+```bash
+curl -L https://foundry.paradigm.xyz | bash
+foundryup
+```
+
+Verify Anvil is installed:
+
+```bash
+anvil --version
+```
+
+#### Running Integration Tests
+
+Integration tests simulate real blockchain reorganizations by:
+
+- Starting a local Anvil test node
+- Deploying test contracts and emitting events
+- Creating blockchain forks and simulating reorgs
+- Verifying reorg detection and handling
+
+Run integration tests:
+
+```bash
+# Run all integration tests
+go test -tags=integration -v ./tests/... -timeout 5m
+
+# Run a specific integration test
+go test -tags=integration -v ./tests/... -run TestReorg_SimpleBlockReplacement
+
+# Run with more verbose output
+go test -tags=integration -v ./tests/... -timeout 5m 2>&1 | tee integration-test.log
+```
+
+#### Integration Test Scenarios
+
+The test suite covers:
+
+1. **Simple Block Replacement** (`TestReorg_SimpleBlockReplacement`)
+   - 2-block reorg with different events
+   - Verifies basic reorg detection
+
+2. **Deep Reorg** (`TestReorg_DeepReorg`)
+   - 15-block reorg
+   - Tests handling of large reorganizations
+
+3. **No Logs on Reorg Chain** (`TestReorg_NoLogsOnReorgChain`)
+   - Reorg where new chain has no events
+   - Verifies detection even without log differences
+
+4. **More Logs on Reorg Chain** (`TestReorg_NewLogsOnReorgChain`)
+   - Reorg where new chain has additional events
+   - Tests log count differences
+
+#### CI/CD Integration
+
+Integration tests are designed to run in CI/CD environments:
+
+```yaml
+# Example GitHub Actions workflow
+- name: Run Integration Tests
+  run: |
+    curl -L https://foundry.paradigm.xyz | bash
+    source ~/.bashrc
+    foundryup
+    go test -tags=integration -v ./tests/... -timeout 5m
+```
+
+#### Test Contract
+
+Integration tests use a simple Solidity contract (`tests/testdata/TestEmitter.sol`) that emits indexed events:
+
+```solidity
+contract TestEmitter {
+    event TestEvent(uint256 indexed id, address indexed sender, string data);
+    
+    function emitEvent(uint256 id, string memory data) public {
+        emit TestEvent(id, msg.sender, data);
+    }
+}
+```
+
+The contract is compiled with `solc` and Go bindings are generated with `abigen` from go-ethereum.
 
 ## 🤝 Contributing
 

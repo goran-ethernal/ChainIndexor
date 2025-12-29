@@ -21,6 +21,10 @@ check-lint:
 check-git:
 	@which git > /dev/null || (echo "git is not installed. Please install and try again."; exit 1)
 
+.PHONY: check-anvil
+check-anvil:
+	@which anvil > /dev/null || (echo "anvil is not installed. Please install Foundry (https://book.getfoundry.sh/getting-started/installation) and try again."; exit 1)
+
 # Targets with required dependencies
 lint: check-go check-lint
 
@@ -85,3 +89,8 @@ test-coverage: check-go ## Run all unit tests with coverage report
 test-quick: check-go ## Run all unit tests without race detector (faster)
 	@echo "Running tests (quick mode)..."
 	@go test ./... -short
+
+.PHONY: test-integration
+test-integration: check-go check-anvil ## Run integration tests (requires Anvil/Foundry)
+	@echo "Running integration tests..."
+	@go test -tags=integration -v ./tests/... -timeout 5m
