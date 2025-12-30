@@ -46,8 +46,8 @@ func TestDownloaderCreation(t *testing.T) {
 	require.NoError(t, err)
 
 	// Create a temporary database for SyncManager
-	tmpDB, cleanup := setupTestDB(t)
-	defer cleanup()
+	tmpDB := setupTestDB(t)
+	defer tmpDB.Close()
 
 	sm, err := NewSyncManager(tmpDB, log, &db.NoOpMaintenance{})
 	require.NoError(t, err)
@@ -63,8 +63,8 @@ func TestIndexerRegistration(t *testing.T) {
 	require.NoError(t, err)
 
 	// Create a temporary database for SyncManager
-	tmpDB, cleanup := setupTestDB(t)
-	defer cleanup()
+	tmpDB := setupTestDB(t)
+	defer tmpDB.Close()
 
 	sm, err := NewSyncManager(tmpDB, log, &db.NoOpMaintenance{})
 	require.NoError(t, err)

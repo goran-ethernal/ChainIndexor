@@ -5,7 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"math/big"
-	"os"
+	"path"
 	"testing"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -23,18 +23,13 @@ func setupTestReorgDetector(t *testing.T) (*ReorgDetector, *mocks.EthClient, fun
 	t.Helper()
 
 	// Create temporary database
-	tmpFile, err := os.CreateTemp("", "reorg_test_*.db")
-	require.NoError(t, err)
-	tmpFile.Close()
-
-	dbPath := tmpFile.Name()
+	dbPath := path.Join(t.TempDir(), "reorg_test.db")
 
 	// Create database config
 	dbConfig := config.DatabaseConfig{Path: dbPath}
 	dbConfig.ApplyDefaults()
 
-	err = migrations.RunMigrations(dbConfig)
-	require.NoError(t, err)
+	require.NoError(t, migrations.RunMigrations(dbConfig))
 
 	database, err := db.NewSQLiteDBFromConfig(dbConfig)
 	require.NoError(t, err)
@@ -51,7 +46,6 @@ func setupTestReorgDetector(t *testing.T) (*ReorgDetector, *mocks.EthClient, fun
 
 	cleanup := func() {
 		detector.Close()
-		os.Remove(dbPath)
 	}
 
 	return detector, mockRPC, cleanup
@@ -70,6 +64,8 @@ func createTestHeader(blockNum uint64, parentHash common.Hash) *types.Header {
 }
 
 func TestReorgDetector_NewReorgDetector(t *testing.T) {
+	t.Parallel()
+
 	detector, _, cleanup := setupTestReorgDetector(t)
 	defer cleanup()
 
@@ -80,6 +76,8 @@ func TestReorgDetector_NewReorgDetector(t *testing.T) {
 }
 
 func TestReorgDetector_VerifyAndRecordBlocks_FirstTime(t *testing.T) {
+	t.Parallel()
+
 	detector, mockRPC, cleanup := setupTestReorgDetector(t)
 	defer cleanup()
 
@@ -133,6 +131,8 @@ func TestReorgDetector_VerifyAndRecordBlocks_FirstTime(t *testing.T) {
 }
 
 func TestReorgDetector_VerifyAndRecordBlocks_WithNonFinalizedBlocks(t *testing.T) {
+	t.Parallel()
+
 	detector, mockRPC, cleanup := setupTestReorgDetector(t)
 	defer cleanup()
 
@@ -192,6 +192,8 @@ func TestReorgDetector_VerifyAndRecordBlocks_WithNonFinalizedBlocks(t *testing.T
 }
 
 func TestReorgDetector_VerifyAndRecordBlocks_ReorgInNonFinalizedBlocks(t *testing.T) {
+	t.Parallel()
+
 	detector, mockRPC, cleanup := setupTestReorgDetector(t)
 	defer cleanup()
 
@@ -239,6 +241,8 @@ func TestReorgDetector_VerifyAndRecordBlocks_ReorgInNonFinalizedBlocks(t *testin
 }
 
 func TestReorgDetector_VerifyAndRecordBlocks_ReorgBetweenRPCCalls(t *testing.T) {
+	t.Parallel()
+
 	detector, mockRPC, cleanup := setupTestReorgDetector(t)
 	defer cleanup()
 
@@ -270,6 +274,8 @@ func TestReorgDetector_VerifyAndRecordBlocks_ReorgBetweenRPCCalls(t *testing.T) 
 }
 
 func TestReorgDetector_VerifyAndRecordBlocks_ChainDiscontinuity(t *testing.T) {
+	t.Parallel()
+
 	detector, mockRPC, cleanup := setupTestReorgDetector(t)
 	defer cleanup()
 
@@ -300,6 +306,8 @@ func TestReorgDetector_VerifyAndRecordBlocks_ChainDiscontinuity(t *testing.T) {
 }
 
 func TestReorgDetector_VerifyAndRecordBlocks_PrunesFinalizedBlocks(t *testing.T) {
+	t.Parallel()
+
 	detector, mockRPC, cleanup := setupTestReorgDetector(t)
 	defer cleanup()
 
@@ -361,6 +369,8 @@ func TestReorgDetector_VerifyAndRecordBlocks_PrunesFinalizedBlocks(t *testing.T)
 }
 
 func TestReorgDetector_VerifyAndRecordBlocks_EmptyLogs(t *testing.T) {
+	t.Parallel()
+
 	detector, mockRPC, cleanup := setupTestReorgDetector(t)
 	defer cleanup()
 
@@ -397,6 +407,8 @@ func TestReorgDetector_VerifyAndRecordBlocks_EmptyLogs(t *testing.T) {
 }
 
 func TestReorgDetector_VerifyAndRecordBlocks_SingleBlock(t *testing.T) {
+	t.Parallel()
+
 	detector, mockRPC, cleanup := setupTestReorgDetector(t)
 	defer cleanup()
 
@@ -434,6 +446,8 @@ func TestReorgDetector_VerifyAndRecordBlocks_SingleBlock(t *testing.T) {
 }
 
 func TestReorgDetector_Close(t *testing.T) {
+	t.Parallel()
+
 	detector, _, _ := setupTestReorgDetector(t)
 
 	// Close should not return an error
@@ -442,6 +456,8 @@ func TestReorgDetector_Close(t *testing.T) {
 }
 
 func TestReorgDetector_StoredBlockOperations(t *testing.T) {
+	t.Parallel()
+
 	detector, mockRPC, cleanup := setupTestReorgDetector(t)
 	defer cleanup()
 

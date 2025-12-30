@@ -237,6 +237,7 @@ type StoredBlock struct {
 	BlockNumber uint64      `meddler:"block_number"`
 	BlockHash   common.Hash `meddler:"block_hash,hash"`
 	ParentHash  common.Hash `meddler:"parent_hash,hash"`
+	CreatedAt   string      `meddler:"created_at"`
 }
 
 // getStoredBlockTx retrieves the cached block for a specific block number using a transaction.
@@ -298,6 +299,28 @@ func (r *ReorgDetector) pruneOldBlocksTx(tx *sql.Tx, keepFromBlock uint64) error
 	}
 
 	return nil
+}
+
+// GetStoredBlock retrieves a cached block for a specific block number.
+// This method is exposed for testing purposes.
+func (r *ReorgDetector) GetStoredBlock(blockNum uint64) (StoredBlock, error) {
+	var block StoredBlock
+	err := meddler.QueryRow(r.db, &block, "SELECT * FROM block_hashes WHERE block_number = ?", blockNum)
+	if err != nil {
+		return StoredBlock{}, err
+	}
+	return block, nil
+}
+
+// GetStoredBlockCount returns the total number of blocks stored in the database.
+// This method is exposed for testing purposes.
+func (r *ReorgDetector) GetStoredBlockCount() (int, error) {
+	var count int
+	err := r.db.QueryRow("SELECT COUNT(*) FROM block_hashes").Scan(&count)
+	if err != nil {
+		return 0, err
+	}
+	return count, nil
 }
 
 // Close closes the database connection.
