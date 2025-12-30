@@ -19,10 +19,10 @@ import (
 func setupMaintenanceTestDB(t *testing.T) (*sql.DB, string) {
 	t.Helper()
 
-	tmpFile := path.Join(t.TempDir(), "maintenance_db.sql")
+	dbPath := path.Join(t.TempDir(), "maintenance_db.sql")
 
 	dbConfig := config.DatabaseConfig{
-		Path:        tmpFile,
+		Path:        dbPath,
 		JournalMode: "WAL",
 		Synchronous: "NORMAL",
 		BusyTimeout: 5000,
@@ -42,7 +42,7 @@ func setupMaintenanceTestDB(t *testing.T) (*sql.DB, string) {
 	`)
 	require.NoError(t, err)
 
-	return db, tmpFile
+	return db, dbPath
 }
 
 func TestMaintenanceCoordinator_NewMaintenanceCoordinator(t *testing.T) {
