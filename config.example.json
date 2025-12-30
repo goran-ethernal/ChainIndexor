@@ -51,6 +51,7 @@
   "indexers": [
     {
       "name": "MyTokenIndexer",
+      "type": "erc20",
       "start_block": 17000000,
       "db": {
         "path": "./data/mytokenindexer.sqlite",

@@ -27,7 +27,7 @@ metrics:
   path: "/metrics"            # metrics endpoint path (default: "/metrics")
 
 downloader:
-  rpc_url: "https://sepolia.gateway.tenderly.co/2gFSUOtAsGNiSwunU65ZoR"
+  rpc_url: "https://mainnet.infura.io/v3/XXXX"
   chunk_size: 5000            # block range per eth_getLogs call
   finality: "finalized"       # "finalized", "safe", or "latest"
   # Optional: RPC retry configuration with exponential backoff
@@ -42,9 +42,9 @@ downloader:
   # Optional: Log retention policy
   retention_policy:
     # Maximum database size in MB (0 = unlimited)
-    max_db_size_mb: 0
+    max_db_size_mb: 1000
     # Maximum blocks to keep from the latest indexed block (0 = unlimited)
-    max_blocks: 0
+    max_blocks: 100000
   maintenance:
     enabled: true                   # enable maintenance tasks
     check_interval: "5m"            # run maintenance every 5 minutes
@@ -53,11 +53,12 @@ downloader:
 
 indexers:
   - name: "MyTokenIndexer"
-    start_block: 3236804     # block to start indexing from
+    type: "erc20"            # indexer type (e.g., "erc20", "erc721", or your custom type)
+    start_block: 17000000    # block to start indexing from
     db:
       <<: *common_db
       path: "./data/mytokenindexer.sqlite"
     contracts:
-      - address: "0x7b79995e5f793A07Bc00c21412e50Ecae098E7f9"
+      - address: "0x1234567890abcdef1234567890abcdef12345678"
         events:
           - "Transfer(address,address,uint256)"

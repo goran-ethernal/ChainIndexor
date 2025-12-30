@@ -100,3 +100,13 @@ build-codegen: check-go ## Build the indexer code generator tool
 	@echo "Building indexer-gen..."
 	@go build -o bin/indexer-gen ./cmd/indexer-gen
 	@echo "✅ Code generator built successfully: bin/indexer-gen"
+
+.PHONY: build
+build: check-go ## Build the ChainIndexor binary with built-in indexers
+	@echo "Building ChainIndexor..."
+	@go build -o bin/indexer ./cmd/indexer
+	@echo "✅ ChainIndexor built successfully: bin/indexer"
+
+.PHONY: build-all
+build-all: build-codegen build ## Build all binaries
+	@echo "✅ All binaries built successfully"

@@ -19,7 +19,6 @@ type Transfer struct {
 	Value string `meddler:"value"`
 }
 
-
 // Approval represents a Approval event.
 // Event signature: Approval(address indexed owner, address indexed spender, uint256 value)
 type Approval struct {

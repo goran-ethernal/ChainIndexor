@@ -353,6 +353,10 @@ type IndexerConfig struct {
 	// Name is a unique identifier for this indexer
 	Name string `yaml:"name" json:"name" toml:"name"`
 
+	// Type specifies the indexer type (e.g., "erc20", "erc721")
+	// This is used by the registry to create the appropriate indexer instance
+	Type string `yaml:"type" json:"type" toml:"type"`
+
 	// StartBlock is the block number to start indexing from
 	StartBlock uint64 `yaml:"start_block" json:"start_block" toml:"start_block"`
 

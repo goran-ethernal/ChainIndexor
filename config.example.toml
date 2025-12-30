@@ -49,6 +49,7 @@ wal_checkpoint_mode = "TRUNCATE"
 
 [[indexers]]
 name = "MyTokenIndexer"
+type = "erc20"
 start_block = 17000000
 db = { path = "./data/mytokenindexer.sqlite", journal_mode = "WAL", synchronous = "NORMAL", busy_timeout = 5000, cache_size = 10000, max_open_connections = 25, max_idle_connections = 5, enable_foreign_keys = true }
 
