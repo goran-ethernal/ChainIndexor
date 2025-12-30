@@ -60,7 +60,7 @@ indexers:
   - name: "ERC20Indexer"
     start_block: 0
     db:
-      path: "./data/e_r_c20.sqlite"
+      path: "./data/erc20.sqlite"
     contracts:
       - address: "0xYourContractAddress"
         events:

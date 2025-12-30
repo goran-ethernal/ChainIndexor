@@ -5,7 +5,6 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 )
 
-
 // Transfer represents a Transfer event.
 // Event signature: Transfer(address indexed from, address indexed to, uint256 value)
 type Transfer struct {
@@ -19,6 +18,7 @@ type Transfer struct {
 	To common.Address `meddler:"to_address,address"`
 	Value string `meddler:"value"`
 }
+
 
 // Approval represents a Approval event.
 // Event signature: Approval(address indexed owner, address indexed spender, uint256 value)

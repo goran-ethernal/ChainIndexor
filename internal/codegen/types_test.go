@@ -20,9 +20,20 @@ func TestGoTypeName(t *testing.T) {
 		{"uint", "string"},
 		{"uint8", "uint64"},
 		{"uint64", "uint64"},
+		{"uint72", "string"},  // > 64 bits, needs string
+		{"uint80", "string"},  // > 64 bits, needs string
+		{"uint96", "string"},  // > 64 bits, needs string
+		{"uint120", "string"}, // > 64 bits, needs string
+		{"uint128", "string"},
 		{"uint256", "string"},
 		{"int", "string"},
 		{"int8", "int64"},
+		{"int64", "int64"},
+		{"int72", "string"},  // > 64 bits, needs string
+		{"int80", "string"},  // > 64 bits, needs string
+		{"int96", "string"},  // > 64 bits, needs string
+		{"int120", "string"}, // > 64 bits, needs string
+		{"int128", "string"},
 		{"int256", "string"},
 		{"address[]", "[]common.Address"},
 		{"uint256[]", "[]string"},
@@ -49,7 +60,18 @@ func TestDBTypeName(t *testing.T) {
 		{"bytes32", "TEXT"},
 		{"uint8", "INTEGER"},
 		{"uint64", "INTEGER"},
+		{"uint72", "TEXT"},  // > 64 bits, needs TEXT
+		{"uint80", "TEXT"},  // > 64 bits, needs TEXT
+		{"uint96", "TEXT"},  // > 64 bits, needs TEXT
+		{"uint120", "TEXT"}, // > 64 bits, needs TEXT
+		{"uint128", "TEXT"},
 		{"uint256", "TEXT"},
+		{"int64", "INTEGER"},
+		{"int72", "TEXT"},  // > 64 bits, needs TEXT
+		{"int80", "TEXT"},  // > 64 bits, needs TEXT
+		{"int96", "TEXT"},  // > 64 bits, needs TEXT
+		{"int120", "TEXT"}, // > 64 bits, needs TEXT
+		{"int128", "TEXT"},
 		{"int256", "TEXT"},
 		{"address[]", "TEXT"},
 	}
@@ -95,9 +117,14 @@ func TestToSnakeCase(t *testing.T) {
 		{"camelCase", "camel_case"},
 		{"PascalCase", "pascal_case"},
 		{"already_snake", "already_snake"},
-		{"HTTPSConnection", "h_t_t_p_s_connection"},
-		{"tokenID", "token_i_d"},
+		{"HTTPSConnection", "https_connection"},
+		{"tokenID", "token_id"},
 		{"simple", "simple"},
+		{"ERC20", "erc20"},
+		{"ERC20Token", "erc20_token"},
+		{"HTTPTest", "http_test"},
+		{"myHTTPServer", "my_http_server"},
+		{"parseHTML", "parse_html"},
 	}
 
 	for _, tt := range tests {
@@ -161,6 +188,15 @@ func TestPluralize(t *testing.T) {
 		{"baby", "babies"},
 		{"day", "days"},
 		{"activity", "activities"},
+		// Past-tense forms (common in events) should not be pluralized
+		{"created", "created"},
+		{"transferred", "transferred"},
+		{"approved", "approved"},
+		{"swapped", "swapped"},
+		{"given", "given"},
+		{"taken", "taken"},
+		{"withdrawn", "withdrawn"},
+		{"shown", "shown"},
 	}
 
 	for _, tt := range tests {
@@ -178,8 +214,11 @@ func TestTableName(t *testing.T) {
 	}{
 		{"Transfer", "transfers"},
 		{"Approval", "approvals"},
-		{"PoolCreated", "pool_createds"},
+		{"PoolCreated", "pool_created"},
 		{"Swap", "swaps"},
+		{"TokensTransferred", "tokens_transferred"},
+		{"AmountGiven", "amount_given"},
+		{"FundsWithdrawn", "funds_withdrawn"},
 	}
 
 	for _, tt := range tests {
@@ -221,6 +260,113 @@ func TestMeddlerTag(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got := MeddlerTag(tt.param)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func TestIsIntSizeLargerThan64(t *testing.T) {
+	tests := []struct {
+		name         string
+		solidityType string
+		intType      string
+		want         bool
+	}{
+		{
+			name:         "uint256 is larger than 64",
+			solidityType: "uint256",
+			intType:      "uint",
+			want:         true,
+		},
+		{
+			name:         "uint128 is larger than 64",
+			solidityType: "uint128",
+			intType:      "uint",
+			want:         true,
+		},
+		{
+			name:         "uint64 is not larger than 64",
+			solidityType: "uint64",
+			intType:      "uint",
+			want:         false,
+		},
+		{
+			name:         "uint32 is not larger than 64",
+			solidityType: "uint32",
+			intType:      "uint",
+			want:         false,
+		},
+		{
+			name:         "uint8 is not larger than 64",
+			solidityType: "uint8",
+			intType:      "uint",
+			want:         false,
+		},
+		{
+			name:         "int256 is larger than 64",
+			solidityType: "int256",
+			intType:      "int",
+			want:         true,
+		},
+		{
+			name:         "int128 is larger than 64",
+			solidityType: "int128",
+			intType:      "int",
+			want:         true,
+		},
+		{
+			name:         "int64 is not larger than 64",
+			solidityType: "int64",
+			intType:      "int",
+			want:         false,
+		},
+		{
+			name:         "int32 is not larger than 64",
+			solidityType: "int32",
+			intType:      "int",
+			want:         false,
+		},
+		{
+			name:         "wrong prefix returns false",
+			solidityType: "uint256",
+			intType:      "int",
+			want:         false,
+		},
+		{
+			name:         "uint72 is larger than 64",
+			solidityType: "uint72",
+			intType:      "uint",
+			want:         true,
+		},
+		{
+			name:         "uint80 is larger than 64",
+			solidityType: "uint80",
+			intType:      "uint",
+			want:         true,
+		},
+		{
+			name:         "uint96 is larger than 64",
+			solidityType: "uint96",
+			intType:      "uint",
+			want:         true,
+		},
+		{
+			name:         "uint120 is larger than 64",
+			solidityType: "uint120",
+			intType:      "uint",
+			want:         true,
+		},
+		{
+			name:         "empty size after prefix returns false",
+			solidityType: "uint",
+			intType:      "uint",
+			want:         true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := isIntSizeLargerThan64(tt.solidityType, tt.intType)
 			assert.Equal(t, tt.want, got)
 		})
 	}

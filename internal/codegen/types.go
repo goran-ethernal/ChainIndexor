@@ -5,6 +5,8 @@ import (
 	"regexp"
 	"strings"
 	"unicode"
+
+	"github.com/goran-ethernal/ChainIndexor/internal/common"
 )
 
 const (
@@ -46,14 +48,12 @@ func GoTypeName(solidityType string) string {
 		}
 		return "[]byte"
 	case strings.HasPrefix(solidityType, "uint"):
-		size := strings.TrimPrefix(solidityType, "uint")
-		if size == "" || size == "256" || size == "128" {
-			return stringType // Large numbers need string representation
+		if isIntSizeLargerThan64(solidityType, "uint") {
+			return stringType
 		}
 		return "uint64"
 	case strings.HasPrefix(solidityType, "int"):
-		size := strings.TrimPrefix(solidityType, "int")
-		if size == "" || size == "256" || size == "128" {
+		if isIntSizeLargerThan64(solidityType, "int") {
 			return stringType
 		}
 		return "int64"
@@ -79,8 +79,11 @@ func DBTypeName(solidityType string) string {
 		// Check if it fits in INTEGER (int64)
 		size := strings.TrimPrefix(solidityType, "uint")
 		size = strings.TrimPrefix(size, "int")
-		if size == "" || size == "256" || size == "128" {
-			return textType // Large numbers as text
+		// Map types larger than 64 bits to TEXT to prevent overflow
+		if size == "" || size == "256" || size == "128" || size == "120" ||
+			size == "112" || size == "104" || size == "96" || size == "88" ||
+			size == "80" || size == "72" {
+			return textType
 		}
 		return "INTEGER"
 	case strings.HasSuffix(solidityType, "[]") || regexp.MustCompile(`\[\d+\]$`).MatchString(solidityType):
@@ -124,14 +127,32 @@ func DBFieldName(paramName string) string {
 }
 
 // ToSnakeCase converts a string from camelCase or PascalCase to snake_case.
+// Handles acronyms properly: ERC20 -> erc20, HTTPTest -> http_test
 func ToSnakeCase(s string) string {
-	result := make([]rune, 0, len(s)+len(s))
-	for i, r := range s {
-		if i > 0 && unicode.IsUpper(r) {
-			result = append(result, '_')
+	var result []rune
+	runes := []rune(s)
+
+	for i := range runes {
+		r := runes[i]
+
+		// Check if current char is uppercase
+		if unicode.IsUpper(r) {
+			// Add underscore before uppercase if:
+			// 1. Not at the start
+			// 2. Previous char was lowercase OR next char is lowercase (end of acronym)
+			if i > 0 {
+				prevIsLower := unicode.IsLower(runes[i-1])
+				nextIsLower := i+1 < len(runes) && unicode.IsLower(runes[i+1])
+
+				if prevIsLower || nextIsLower {
+					result = append(result, '_')
+				}
+			}
 		}
+
 		result = append(result, unicode.ToLower(r))
 	}
+
 	return string(result)
 }
 
@@ -160,7 +181,16 @@ func ToLowerCamelCase(s string) string {
 }
 
 // Pluralize returns a simple pluralized form of a word.
+// For past-tense event names (ending in -ed, -en, -wn), returns the word unchanged
+// since events are already conceptually plural.
 func Pluralize(word string) string {
+	// Don't pluralize past-tense/past-participle forms (common in event names)
+	// -ed: created, transferred, deposited
+	// -en: given, taken, written
+	// -wn: withdrawn, shown, known
+	if strings.HasSuffix(word, "ed") || strings.HasSuffix(word, "en") || strings.HasSuffix(word, "wn") {
+		return word
+	}
 	if strings.HasSuffix(word, "s") || strings.HasSuffix(word, "x") ||
 		strings.HasSuffix(word, "z") || strings.HasSuffix(word, "ch") ||
 		strings.HasSuffix(word, "sh") {
@@ -176,6 +206,12 @@ func Pluralize(word string) string {
 	return word + "s"
 }
 
+// TableName generates a table name from an event name.
+func TableName(eventName string) string {
+	snake := ToSnakeCase(eventName)
+	return Pluralize(snake)
+}
+
 func isVowel(r rune) bool {
 	switch unicode.ToLower(r) {
 	case 'a', 'e', 'i', 'o', 'u':
@@ -185,8 +221,17 @@ func isVowel(r rune) bool {
 	}
 }
 
-// TableName generates a table name from an event name.
-func TableName(eventName string) string {
-	snake := ToSnakeCase(eventName)
-	return Pluralize(snake)
+func isIntSizeLargerThan64(solidityType, intType string) bool {
+	after, ok := strings.CutPrefix(solidityType, intType)
+	if !ok {
+		return false
+	}
+
+	size := after
+	sizeNum, err := common.ParseUint64orHex(&size)
+	if err != nil {
+		return true // Assume larger on parse error
+	}
+
+	return sizeNum > 64
 }
