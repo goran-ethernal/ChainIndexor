@@ -45,3 +45,6 @@ go.work.sum
 
 # Test logs
 integration-test.log
+
+# Build output
+/bin

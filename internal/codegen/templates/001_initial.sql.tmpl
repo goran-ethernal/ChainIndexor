@@ -1,0 +1,37 @@
+-- +migrate Down
+{{- range .Events}}
+{{$tableName := TableName .Name -}}
+{{range .Params -}}
+{{if or (eq .Type "address") .Indexed -}}
+DROP INDEX IF EXISTS idx_{{$tableName}}_{{DBFieldName .Name}};
+{{end -}}
+{{end -}}
+DROP INDEX IF EXISTS idx_{{$tableName}}_tx_hash;
+DROP INDEX IF EXISTS idx_{{$tableName}}_block_number;
+DROP TABLE IF EXISTS {{$tableName}};
+
+{{end -}}
+-- +migrate Up
+{{- range .Events}}
+{{$tableName := TableName .Name -}}
+CREATE TABLE IF NOT EXISTS {{$tableName}} (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    block_number INTEGER NOT NULL,
+    block_hash TEXT NOT NULL,
+    tx_hash TEXT NOT NULL,
+    tx_index INTEGER NOT NULL,
+    log_index INTEGER NOT NULL,
+    {{- range .Params}}
+    {{DBFieldName .Name}} {{DBTypeName .Type}} NOT NULL,
+    {{- end}}
+    UNIQUE(tx_hash, log_index)
+);
+
+CREATE INDEX IF NOT EXISTS idx_{{$tableName}}_block_number ON {{$tableName}}(block_number);
+CREATE INDEX IF NOT EXISTS idx_{{$tableName}}_tx_hash ON {{$tableName}}(tx_hash);
+{{range .Params -}}
+{{if or (eq .Type "address") .Indexed -}}
+CREATE INDEX IF NOT EXISTS idx_{{$tableName}}_{{DBFieldName .Name}} ON {{$tableName}}({{DBFieldName .Name}});
+{{end -}}
+{{end}}
+{{end}}

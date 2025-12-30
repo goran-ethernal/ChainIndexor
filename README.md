@@ -19,6 +19,7 @@ ChainIndexor is designed to:
 ## ✨ Features
 
 - **Modular Indexer Framework**: Easily add custom indexers for any contract/event.
+- **Code Generation**: Automatically generate production-ready indexers from event signatures. See [Code Generator Documentation](./internal/codegen/README.md).
 - **Recursive Log Fetching**: Automatically splits queries to handle RPC "too many results" errors.
 - **Reorg Detection & Recovery**: Detects chain reorganizations and safely rolls back indexed data.
 - **Configurable Database Backend**: Uses SQLite with connection pooling, PRAGMA tuning, and schema migrations.
@@ -37,6 +38,28 @@ ChainIndexor is optimized for:
 - Multi-indexer support with independent start blocks and schemas.
 
 ## 🛠️ Usage
+
+### Quick Start with Code Generator
+
+Generate a custom indexer from event signatures:
+
+```bash
+# Build the generator
+make build-codegen
+
+# Generate an ERC20 indexer
+./bin/indexer-gen \
+  --name ERC20 \
+  --event "Transfer(address indexed from, address indexed to, uint256 value)" \
+  --event "Approval(address indexed owner, address indexed spender, uint256 value)" \
+  --output ./indexers/erc20
+```
+
+This automatically creates all necessary files: models, indexer logic, migrations, and documentation.
+
+📖 **[Full Code Generator Documentation](./internal/codegen/README.md)**
+
+### Manual Setup
 
 1. **Configure**: Edit `config.example.yaml` to specify RPC endpoints, indexers, and database settings.
 2. **Run Migrations**: Ensure database schemas are up-to-date (automatic on startup).

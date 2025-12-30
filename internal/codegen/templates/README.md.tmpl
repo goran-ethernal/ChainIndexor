@@ -1,0 +1,101 @@
+# {{.Name}} Indexer
+
+Auto-generated indexer for {{.Name}} events.
+
+## Events
+{{range .Events}}
+- {{"`"}}{{.Raw}}{{"`"}}
+{{- end}}
+
+## Database Schema
+{{- range .Events}}
+
+### {{TableName .Name}}
+
+| Column | Type | Description |
+| ------ | ---- | ----------- |
+| id | INTEGER | Primary key |
+| block_number | INTEGER | Block number |
+| block_hash | TEXT | Block hash |
+| tx_hash | TEXT | Transaction hash |
+| tx_index | INTEGER | Transaction index |
+| log_index | INTEGER | Log index |
+{{- range .Params}}
+| {{DBFieldName .Name}} | {{DBTypeName .Type}} | {{.Name}} ({{.Type}}) |
+{{- end}}
+
+**Indexes:**
+
+- {{"`"}}block_number{{"`"}}
+- {{"`"}}tx_hash{{"`"}}
+{{- range .Params}}
+{{- if or (eq .Type "address") .Indexed}}
+- {{"`"}}{{DBFieldName .Name}}{{"`"}}
+{{- end}}
+{{- end}}
+{{- end}}
+
+## Usage
+
+### 1. Add to your config.yaml
+
+{{"`"}}{{"`"}}{{"`"}}yaml
+indexers:
+  - name: "{{.Name}}Indexer"
+    start_block: 0
+    db:
+      path: "./data/{{ToSnakeCase .Name}}.sqlite"
+    contracts:
+      - address: "0xYourContractAddress"
+        events:
+{{- range .Events}}
+          - "{{.CanonicalSignature}}"
+{{- end}}
+{{"`"}}{{"`"}}{{"`"}}
+
+### 2. Import in your main.go
+
+{{"`"}}{{"`"}}{{"`"}}go
+import "yourproject/indexers/{{.Package}}"
+
+indexer, err := {{.Package}}.New{{.Name}}Indexer(cfg, log)
+if err != nil {
+    log.Fatal(err)
+}
+
+orchestrator.RegisterIndexer(indexer)
+{{"`"}}{{"`"}}{{"`"}}
+
+### 3. Run your indexer
+
+{{"`"}}{{"`"}}{{"`"}}bash
+go run ./cmd/indexer
+{{"`"}}{{"`"}}{{"`"}}
+
+## Generated Files
+
+- {{"`"}}indexer.go{{"`"}} - Main indexer implementation
+- {{"`"}}models.go{{"`"}} - Event struct definitions
+- {{"`"}}migrations/migrations.go{{"`"}} - Database schema and migrations
+
+## Customization
+
+This indexer was auto-generated. To add custom logic:
+
+1. Create a new file (e.g., {{"`"}}indexer_custom.go{{"`"}})
+2. Add methods to the {{"`"}}{{.Name}}Indexer{{"`"}} struct
+3. The generated files won't be overwritten unless you regenerate with {{"`"}}--force{{"`"}}
+
+## Regeneration
+
+To regenerate this indexer after config changes:
+
+{{"`"}}{{"`"}}{{"`"}}bash
+indexer-gen \
+  --name "{{.Name}}" \
+{{- range .Events}}
+  --event "{{.Raw}}" \
+{{- end}}
+  --output ./indexers/{{.Package}} \
+  --force
+{{"`"}}{{"`"}}{{"`"}}

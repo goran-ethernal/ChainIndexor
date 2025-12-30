@@ -1,13 +1,16 @@
 -- +migrate Down
-DROP INDEX IF EXISTS idx_approvals_spender;
-DROP INDEX IF EXISTS idx_approvals_owner;
-DROP INDEX IF EXISTS idx_approvals_block_number;
-DROP TABLE IF EXISTS approvals;
-
-DROP INDEX IF EXISTS idx_transfers_to;
-DROP INDEX IF EXISTS idx_transfers_from;
+DROP INDEX IF EXISTS idx_transfers_from_address;
+DROP INDEX IF EXISTS idx_transfers_to_address;
+DROP INDEX IF EXISTS idx_transfers_tx_hash;
 DROP INDEX IF EXISTS idx_transfers_block_number;
 DROP TABLE IF EXISTS transfers;
+
+
+DROP INDEX IF EXISTS idx_approvals_owner_address;
+DROP INDEX IF EXISTS idx_approvals_spender_address;
+DROP INDEX IF EXISTS idx_approvals_tx_hash;
+DROP INDEX IF EXISTS idx_approvals_block_number;
+DROP TABLE IF EXISTS approvals;
 
 -- +migrate Up
 CREATE TABLE IF NOT EXISTS transfers (
@@ -24,8 +27,10 @@ CREATE TABLE IF NOT EXISTS transfers (
 );
 
 CREATE INDEX IF NOT EXISTS idx_transfers_block_number ON transfers(block_number);
-CREATE INDEX IF NOT EXISTS idx_transfers_from ON transfers(from_address);
-CREATE INDEX IF NOT EXISTS idx_transfers_to ON transfers(to_address);
+CREATE INDEX IF NOT EXISTS idx_transfers_tx_hash ON transfers(tx_hash);
+CREATE INDEX IF NOT EXISTS idx_transfers_from_address ON transfers(from_address);
+CREATE INDEX IF NOT EXISTS idx_transfers_to_address ON transfers(to_address);
+
 
 CREATE TABLE IF NOT EXISTS approvals (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -41,5 +46,8 @@ CREATE TABLE IF NOT EXISTS approvals (
 );
 
 CREATE INDEX IF NOT EXISTS idx_approvals_block_number ON approvals(block_number);
-CREATE INDEX IF NOT EXISTS idx_approvals_owner ON approvals(owner_address);
-CREATE INDEX IF NOT EXISTS idx_approvals_spender ON approvals(spender_address);
+CREATE INDEX IF NOT EXISTS idx_approvals_tx_hash ON approvals(tx_hash);
+CREATE INDEX IF NOT EXISTS idx_approvals_owner_address ON approvals(owner_address);
+CREATE INDEX IF NOT EXISTS idx_approvals_spender_address ON approvals(spender_address);
+
+
