@@ -100,7 +100,7 @@ func TestRun(t *testing.T) {
 		t.Fatalf("failed to create downloader: %v", err)
 	}
 
-	erc20Indexer, err := erc20.NewERC20TokenIndexer(cfg.Indexers[0], logger.GetDefaultLogger())
+	erc20Indexer, err := erc20.NewERC20Indexer(cfg.Indexers[0], logger.GetDefaultLogger())
 	if err != nil {
 		t.Fatalf("failed to create ERC20 indexer: %v", err)
 	}

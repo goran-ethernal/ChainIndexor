@@ -39,12 +39,12 @@ generate-mocks: ## Generate mock files for testing
 .PHONY: test
 test: check-go ## Run all unit tests
 	@echo "Running all tests..."
-	@go test ./... -v -race
+	@go test $$(go list ./... | grep -v /tests) -v -race
 
 .PHONY: test-coverage
 test-coverage: check-go ## Run all unit tests with coverage report
 	@echo "Running tests with coverage..."
-	@go test ./... -coverprofile=coverage.out -coverpkg=./... -v
+	@go test $$(go list ./... | grep -v /tests | grep -v /examples) -coverprofile=coverage.out -coverpkg=./... -v
 	@echo ""
 	@echo "📊 Coverage Summary:"
 	@echo "===================="
@@ -94,3 +94,9 @@ test-quick: check-go ## Run all unit tests without race detector (faster)
 test-integration: check-go check-anvil ## Run integration tests (requires Anvil/Foundry)
 	@echo "Running integration tests..."
 	@go test -tags=integration -v ./tests/... -timeout 5m
+
+.PHONY: build-codegen
+build-codegen: check-go ## Build the indexer code generator tool
+	@echo "Building indexer-gen..."
+	@go build -o bin/indexer-gen ./cmd/indexer-gen
+	@echo "✅ Code generator built successfully: bin/indexer-gen"
