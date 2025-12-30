@@ -2,7 +2,7 @@ package downloader
 
 import (
 	"database/sql"
-	"os"
+	"path"
 	"testing"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -14,10 +14,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func setupTestDB(t *testing.T) (*sql.DB, func()) {
+func setupTestDB(t *testing.T) *sql.DB {
 	t.Helper()
 
-	tmpDB := t.TempDir() + "/test_downloader.db"
+	tmpDB := path.Join(t.TempDir(), "test_downloader.db")
 
 	// Create database config
 	dbConfig := config.DatabaseConfig{
@@ -31,18 +31,13 @@ func setupTestDB(t *testing.T) (*sql.DB, func()) {
 	db, err := db.NewSQLiteDBFromConfig(dbConfig)
 	require.NoError(t, err)
 
-	cleanup := func() {
-		os.Remove(tmpDB)
-		db.Close()
-	}
-
-	return db, cleanup
+	return db
 }
 
 func TestSyncManager(t *testing.T) {
 	// Create a temporary database file
-	tmpDB, cleanup := setupTestDB(t)
-	defer cleanup()
+	tmpDB := setupTestDB(t)
+	defer tmpDB.Close()
 
 	log, err := logger.NewLogger("info", true)
 	require.NoError(t, err)
@@ -113,8 +108,8 @@ func TestSyncManager(t *testing.T) {
 
 func TestSyncManagerPersistence(t *testing.T) {
 	// Create a temporary database file
-	tmpDB, cleanup := setupTestDB(t)
-	defer cleanup()
+	tmpDB := setupTestDB(t)
+	defer tmpDB.Close()
 
 	log, err := logger.NewLogger("info", true)
 	require.NoError(t, err)

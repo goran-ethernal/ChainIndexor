@@ -3,7 +3,7 @@ package store
 import (
 	"context"
 	"math/big"
-	"os"
+	"path"
 	"testing"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -27,11 +27,7 @@ func setupTestLogStoreWithRetention(t *testing.T,
 	t.Helper()
 
 	// Create temporary database
-	tmpFile, err := os.CreateTemp("", "logstore_test_*.db")
-	require.NoError(t, err)
-	tmpFile.Close()
-
-	dbPath := tmpFile.Name()
+	dbPath := path.Join(t.TempDir(), "logstore_test.db")
 
 	dbConfig := config.DatabaseConfig{Path: dbPath}
 	dbConfig.ApplyDefaults()
@@ -52,7 +48,6 @@ func setupTestLogStoreWithRetention(t *testing.T,
 
 	cleanup := func() {
 		sqlDB.Close()
-		os.Remove(dbPath)
 	}
 
 	return store, cleanup
@@ -72,6 +67,8 @@ func createTestLog(address common.Address, blockNumber uint64, txHash common.Has
 }
 
 func TestLogStore_StoreLogs(t *testing.T) {
+	t.Parallel()
+
 	store, cleanup := setupTestLogStore(t)
 	defer cleanup()
 
@@ -104,6 +101,8 @@ func TestLogStore_StoreLogs(t *testing.T) {
 }
 
 func TestLogStore_GetLogs_PartialCoverage(t *testing.T) {
+	t.Parallel()
+
 	store, cleanup := setupTestLogStore(t)
 	defer cleanup()
 
@@ -143,6 +142,8 @@ func TestLogStore_GetLogs_PartialCoverage(t *testing.T) {
 }
 
 func TestLogStore_HandleReorg(t *testing.T) {
+	t.Parallel()
+
 	store, cleanup := setupTestLogStore(t)
 	defer cleanup()
 
@@ -181,6 +182,8 @@ func TestLogStore_HandleReorg(t *testing.T) {
 }
 
 func TestLogStore_MultipleAddresses(t *testing.T) {
+	t.Parallel()
+
 	store, cleanup := setupTestLogStore(t)
 	defer cleanup()
 
@@ -219,6 +222,8 @@ func TestLogStore_MultipleAddresses(t *testing.T) {
 }
 
 func TestLogStore_GetUnsyncedTopics(t *testing.T) {
+	t.Parallel()
+
 	store, cleanup := setupTestLogStore(t)
 	defer cleanup()
 
@@ -267,6 +272,8 @@ func TestLogStore_GetUnsyncedTopics(t *testing.T) {
 }
 
 func TestLogStore_GetUnsyncedTopics_CompleteCoverage(t *testing.T) {
+	t.Parallel()
+
 	store, cleanup := setupTestLogStore(t)
 	defer cleanup()
 
@@ -293,6 +300,8 @@ func TestLogStore_GetUnsyncedTopics_CompleteCoverage(t *testing.T) {
 }
 
 func TestLogStore_HandleReorg_ClearsTopicCoverage(t *testing.T) {
+	t.Parallel()
+
 	store, cleanup := setupTestLogStore(t)
 	defer cleanup()
 
@@ -326,6 +335,8 @@ func TestLogStore_HandleReorg_ClearsTopicCoverage(t *testing.T) {
 }
 
 func TestLogStore_HandleReorg_TruncatesSpanningRanges(t *testing.T) {
+	t.Parallel()
+
 	store, cleanup := setupTestLogStore(t)
 	defer cleanup()
 
@@ -403,6 +414,8 @@ func TestLogStore_HandleReorg_TruncatesSpanningRanges(t *testing.T) {
 }
 
 func TestIsCovered(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name     string
 		from     uint64
@@ -448,6 +461,8 @@ func TestIsCovered(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
 			result := store.IsCovered(tt.from, tt.to, tt.coverage)
 			require.Equal(t, tt.expected, result)
 		})
@@ -455,6 +470,8 @@ func TestIsCovered(t *testing.T) {
 }
 
 func TestGetMissingRanges(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name     string
 		from     uint64
@@ -516,6 +533,8 @@ func TestGetMissingRanges(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
 			result := store.GetMissingRanges(tt.from, tt.to, tt.coverage)
 			require.Equal(t, tt.expected, result)
 		})
@@ -609,6 +628,8 @@ func TestLogStore_TopicConversion(t *testing.T) {
 }
 
 func TestLogStore_StoreLogs_EmptyLogs(t *testing.T) {
+	t.Parallel()
+
 	store, cleanup := setupTestLogStore(t)
 	defer cleanup()
 
@@ -629,6 +650,8 @@ func TestLogStore_StoreLogs_EmptyLogs(t *testing.T) {
 }
 
 func TestLogStore_StoreLogs_DuplicateLogs(t *testing.T) {
+	t.Parallel()
+
 	store, cleanup := setupTestLogStore(t)
 	defer cleanup()
 
@@ -656,6 +679,8 @@ func TestLogStore_StoreLogs_DuplicateLogs(t *testing.T) {
 }
 
 func TestLogStore_MultipleTopics(t *testing.T) {
+	t.Parallel()
+
 	store, cleanup := setupTestLogStore(t)
 	defer cleanup()
 
@@ -685,6 +710,8 @@ func TestLogStore_MultipleTopics(t *testing.T) {
 }
 
 func TestLogStore_GetLogs_NoCoverage(t *testing.T) {
+	t.Parallel()
+
 	store, cleanup := setupTestLogStore(t)
 	defer cleanup()
 
@@ -699,6 +726,8 @@ func TestLogStore_GetLogs_NoCoverage(t *testing.T) {
 }
 
 func TestLogStore_CalculateBlocksToFreeSpace(t *testing.T) {
+	t.Parallel()
+
 	store, cleanup := setupTestLogStore(t)
 	defer cleanup()
 
@@ -918,7 +947,11 @@ func TestLogStore_CalculateBlocksToFreeSpace(t *testing.T) {
 }
 
 func TestLogStore_RetentionPolicy(t *testing.T) {
+	t.Parallel()
+
 	t.Run("MaxBlocksFromFinalized", func(t *testing.T) {
+		t.Parallel()
+
 		// Retention policy: keep only 100 blocks from finalized
 		retentionPolicy := &config.RetentionPolicyConfig{
 			MaxBlocks:   100,
@@ -1003,6 +1036,8 @@ func TestLogStore_RetentionPolicy(t *testing.T) {
 	})
 
 	t.Run("MaxDBSizeMB", func(t *testing.T) {
+		t.Parallel()
+
 		// Retention policy: limit database to 5 MB
 		retentionPolicy := &config.RetentionPolicyConfig{
 			MaxBlocks:   0, // disabled
@@ -1083,6 +1118,8 @@ func TestLogStore_RetentionPolicy(t *testing.T) {
 	})
 
 	t.Run("CombinedPolicy", func(t *testing.T) {
+		t.Parallel()
+
 		// Test both policies active - should use whichever is more aggressive
 		retentionPolicy := &config.RetentionPolicyConfig{
 			MaxBlocks:   200, // keep 200 blocks

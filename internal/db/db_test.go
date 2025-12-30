@@ -2,6 +2,7 @@ package db
 
 import (
 	"os"
+	"path"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -64,8 +65,7 @@ func TestDBTotalSize(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			// Prepare temp files
-			tmpDir := t.TempDir()
-			mainPath := tmpDir + "/main.db"
+			mainPath := path.Join(t.TempDir(), "main.db")
 			paths := []string{mainPath}
 			if len(tc.files) > 1 {
 				for _, f := range tc.files[1:] {

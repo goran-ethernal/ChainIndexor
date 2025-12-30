@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"os"
+	"path"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -15,14 +16,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func setupMaintenanceTestDB(t *testing.T) (*sql.DB, string, func()) {
+func setupMaintenanceTestDB(t *testing.T) (*sql.DB, string) {
 	t.Helper()
 
-	tmpFile, err := os.CreateTemp("", "maintenance_test_*.db")
-	require.NoError(t, err)
-	tmpFile.Close()
-
-	dbPath := tmpFile.Name()
+	dbPath := path.Join(t.TempDir(), "maintenance_db.sql")
 
 	dbConfig := config.DatabaseConfig{
 		Path:        dbPath,
@@ -45,19 +42,14 @@ func setupMaintenanceTestDB(t *testing.T) (*sql.DB, string, func()) {
 	`)
 	require.NoError(t, err)
 
-	cleanup := func() {
-		db.Close()
-		os.Remove(dbPath)
-		os.Remove(dbPath + "-wal")
-		os.Remove(dbPath + "-shm")
-	}
-
-	return db, dbPath, cleanup
+	return db, dbPath
 }
 
 func TestMaintenanceCoordinator_NewMaintenanceCoordinator(t *testing.T) {
-	db, dbPath, cleanup := setupMaintenanceTestDB(t)
-	defer cleanup()
+	t.Parallel()
+
+	db, dbPath := setupMaintenanceTestDB(t)
+	defer db.Close()
 
 	log, err := logger.NewLogger("info", true)
 	require.NoError(t, err)
@@ -76,8 +68,10 @@ func TestMaintenanceCoordinator_NewMaintenanceCoordinator(t *testing.T) {
 }
 
 func TestMaintenanceCoordinator_RunMaintenance(t *testing.T) {
-	db, dbPath, cleanup := setupMaintenanceTestDB(t)
-	defer cleanup()
+	t.Parallel()
+
+	db, dbPath := setupMaintenanceTestDB(t)
+	defer db.Close()
 
 	log, err := logger.NewLogger("info", true)
 	require.NoError(t, err)
@@ -113,8 +107,10 @@ func TestMaintenanceCoordinator_RunMaintenance(t *testing.T) {
 }
 
 func TestMaintenanceCoordinator_WALCheckpoint(t *testing.T) {
-	db, dbPath, cleanup := setupMaintenanceTestDB(t)
-	defer cleanup()
+	t.Parallel()
+
+	db, dbPath := setupMaintenanceTestDB(t)
+	defer db.Close()
 
 	log, err := logger.NewLogger("info", true)
 	require.NoError(t, err)
@@ -151,8 +147,10 @@ func TestMaintenanceCoordinator_WALCheckpoint(t *testing.T) {
 }
 
 func TestMaintenanceCoordinator_OperationLock(t *testing.T) {
-	db, dbPath, cleanup := setupMaintenanceTestDB(t)
-	defer cleanup()
+	t.Parallel()
+
+	db, dbPath := setupMaintenanceTestDB(t)
+	defer db.Close()
 
 	log, err := logger.NewLogger("info", true)
 	require.NoError(t, err)
@@ -182,8 +180,10 @@ func TestMaintenanceCoordinator_OperationLock(t *testing.T) {
 }
 
 func TestMaintenanceCoordinator_MaintenanceBlocksOperations(t *testing.T) {
-	db, dbPath, cleanup := setupMaintenanceTestDB(t)
-	defer cleanup()
+	t.Parallel()
+
+	db, dbPath := setupMaintenanceTestDB(t)
+	defer db.Close()
 
 	log, err := logger.NewLogger("info", true)
 	require.NoError(t, err)
@@ -244,8 +244,10 @@ func TestMaintenanceCoordinator_MaintenanceBlocksOperations(t *testing.T) {
 }
 
 func TestMaintenanceCoordinator_BackgroundMaintenance(t *testing.T) {
-	db, dbPath, cleanup := setupMaintenanceTestDB(t)
-	defer cleanup()
+	t.Parallel()
+
+	db, dbPath := setupMaintenanceTestDB(t)
+	defer db.Close()
 
 	log, err := logger.NewLogger("info", true)
 	require.NoError(t, err)
@@ -282,14 +284,16 @@ func TestMaintenanceCoordinator_BackgroundMaintenance(t *testing.T) {
 }
 
 func TestMaintenanceCoordinator_StartupMaintenance(t *testing.T) {
-	db, dbPath, cleanup := setupMaintenanceTestDB(t)
-	defer cleanup()
+	t.Parallel()
+
+	db, dbPath := setupMaintenanceTestDB(t)
+	defer db.Close()
 
 	log, err := logger.NewLogger("info", true)
 	require.NoError(t, err)
 
 	// Insert data before starting coordinator
-	for i := 0; i < 100; i++ {
+	for range 100 {
 		_, err := db.Exec("INSERT INTO test_data (data) VALUES (?)", "test")
 		require.NoError(t, err)
 	}
@@ -318,8 +322,10 @@ func TestMaintenanceCoordinator_StartupMaintenance(t *testing.T) {
 }
 
 func TestMaintenanceCoordinator_DisabledMaintenance(t *testing.T) {
-	db, dbPath, cleanup := setupMaintenanceTestDB(t)
-	defer cleanup()
+	t.Parallel()
+
+	db, dbPath := setupMaintenanceTestDB(t)
+	defer db.Close()
 
 	log, err := logger.NewLogger("info", true)
 	require.NoError(t, err)
@@ -346,8 +352,10 @@ func TestMaintenanceCoordinator_DisabledMaintenance(t *testing.T) {
 }
 
 func TestMaintenanceCoordinator_ContextCancellation(t *testing.T) {
-	db, dbPath, cleanup := setupMaintenanceTestDB(t)
-	defer cleanup()
+	t.Parallel()
+
+	db, dbPath := setupMaintenanceTestDB(t)
+	defer db.Close()
 
 	log, err := logger.NewLogger("info", true)
 	require.NoError(t, err)
@@ -368,8 +376,10 @@ func TestMaintenanceCoordinator_ContextCancellation(t *testing.T) {
 }
 
 func TestMaintenanceCoordinator_ConcurrentOperationsDuringMaintenance(t *testing.T) {
-	db, dbPath, cleanup := setupMaintenanceTestDB(t)
-	defer cleanup()
+	t.Parallel()
+
+	db, dbPath := setupMaintenanceTestDB(t)
+	defer db.Close()
 
 	log, err := logger.NewLogger("info", true)
 	require.NoError(t, err)
@@ -391,7 +401,7 @@ func TestMaintenanceCoordinator_ConcurrentOperationsDuringMaintenance(t *testing
 		go func(id int) {
 			defer wg.Done()
 
-			for j := 0; j < 5; j++ {
+			for range 5 {
 				unlock := coordinator.AcquireOperationLock()
 
 				// Simulate database operation
