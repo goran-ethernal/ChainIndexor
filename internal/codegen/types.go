@@ -15,6 +15,8 @@ const (
 	stringType  = "string"
 	bytesType   = "bytes"
 	textType    = "TEXT"
+
+	int64Size = 64
 )
 
 // GoTypeName converts a Solidity type to a Go type name.
@@ -129,7 +131,7 @@ func DBFieldName(paramName string) string {
 // ToSnakeCase converts a string from camelCase or PascalCase to snake_case.
 // Handles acronyms properly: ERC20 -> erc20, HTTPTest -> http_test
 func ToSnakeCase(s string) string {
-	var result []rune
+	result := make([]rune, 0, len(s)+len(s))
 	runes := []rune(s)
 
 	for i := range runes {
@@ -233,5 +235,5 @@ func isIntSizeLargerThan64(solidityType, intType string) bool {
 		return true // Assume larger on parse error
 	}
 
-	return sizeNum > 64
+	return sizeNum > int64Size
 }
