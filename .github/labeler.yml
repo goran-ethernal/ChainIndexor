@@ -49,3 +49,9 @@ metrics:
   - changed-files:
     - any-glob-to-any-file: 'internal/**/metrics.go'
     - any-glob-to-any-file: 'internal/metrics/**'
+
+codegen:
+  - changed-files:
+    - any-glob-to-any-file: 'cmd/indexer-gen/**'
+  - changed-files:
+    - any-glob-to-any-file: 'internal/codegen/**'
