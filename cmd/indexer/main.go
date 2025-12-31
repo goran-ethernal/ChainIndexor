@@ -7,6 +7,8 @@ import (
 	"os/signal"
 	"syscall"
 
+	// Import built-in indexers to register them
+	_ "github.com/goran-ethernal/ChainIndexor/examples/indexers/erc20"
 	"github.com/goran-ethernal/ChainIndexor/internal/common"
 	"github.com/goran-ethernal/ChainIndexor/internal/config"
 	"github.com/goran-ethernal/ChainIndexor/internal/db"
@@ -18,9 +20,6 @@ import (
 	"github.com/goran-ethernal/ChainIndexor/internal/rpc"
 	"github.com/goran-ethernal/ChainIndexor/pkg/indexer"
 	"github.com/spf13/cobra"
-
-	// Import built-in indexers to trigger registration
-	_ "github.com/goran-ethernal/ChainIndexor/examples/indexers/erc20"
 )
 
 const (
