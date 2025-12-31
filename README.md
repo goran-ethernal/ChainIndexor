@@ -20,6 +20,7 @@ ChainIndexor is designed to:
 
 - **Modular Indexer Framework**: Easily add custom indexers for any contract/event.
 - **Code Generation**: Automatically generate production-ready indexers from event signatures. See [Code Generator Documentation](./internal/codegen/README.md).
+- **Docker Support**: Production-ready Docker and docker-compose configurations. See [Docker Deployment Guide](./DOCKER.md).
 - **Recursive Log Fetching**: Automatically splits queries to handle RPC "too many results" errors.
 - **Reorg Detection & Recovery**: Detects chain reorganizations and safely rolls back indexed data.
 - **Configurable Database Backend**: Uses SQLite with connection pooling, PRAGMA tuning, and schema migrations.
@@ -38,6 +39,113 @@ ChainIndexor is optimized for:
 - Multi-indexer support with independent start blocks and schemas.
 
 ## 🛠️ Usage
+
+ChainIndexor can be used in two ways:
+
+### 1. As a Library (For Custom Indexers) 🔧
+
+Use ChainIndexor as a Go library to build your own custom indexers:
+
+```bash
+# Install the library
+go get github.com/goran-ethernal/ChainIndexor
+```
+
+**Generate your indexer:**
+
+```bash
+# Install the code generator
+go install github.com/goran-ethernal/ChainIndexor/cmd/indexer-gen@latest
+
+# Generate a custom indexer
+indexer-gen \
+  --name MyContract \
+  --event "MyEvent(address indexed user, uint256 amount)" \
+  --output ./indexers/mycontract
+```
+
+**Create your main.go:**
+
+```go
+package main
+
+import (
+    "context"
+    "github.com/goran-ethernal/ChainIndexor/pkg/downloader"
+    "github.com/goran-ethernal/ChainIndexor/pkg/config"
+    
+    // Import your custom indexer
+    "myproject/indexers/mycontract"
+)
+
+func main() {
+    cfg, _ := config.LoadFromFile("config.yaml")
+    
+    dl, _ := downloader.New(cfg.Downloader, /* ... */)
+    
+    // Register your custom indexer
+    idx, _ := mycontract.NewMyContractIndexer(cfg.Indexers[0], log)
+    dl.RegisterIndexer(idx)
+    
+    dl.Download(context.Background(), *cfg)
+}
+```
+
+**This approach is perfect for:**
+
+- Custom contracts and events not covered by built-in indexers
+- Full control over indexing logic and data processing
+- Integration with existing Go applications
+- Mixing custom indexers with built-in ones
+
+### 2. As a Pre-built Binary (For Built-in Indexers) 📦
+
+For common use cases (ERC20, ERC721, etc.), use the pre-built binary:
+
+```bash
+# Build from source
+make build
+
+# Or install directly
+go install github.com/goran-ethernal/ChainIndexor/cmd/indexer@latest
+```
+
+**List available indexer types:**
+
+```bash
+./bin/indexer list
+```
+
+**Run with configuration:**
+
+```bash
+./bin/indexer --config config.yaml
+```
+
+**Example config.yaml:**
+
+```yaml
+indexers:
+  - name: "MyERC20Indexer"
+    type: "erc20"  # Built-in indexer type
+    start_block: 0
+    db:
+      path: "./data/erc20.sqlite"
+    contracts:
+      - address: "0x..."
+        events:
+          - "Transfer(address,address,uint256)"
+          - "Approval(address,address,uint256)"
+```
+
+**This approach is perfect for:**
+
+- Standard ERC20/ERC721 token indexing
+- Quick setup without writing code
+- Running multiple built-in indexers
+- Production deployments with common indexers
+
+---
 
 ### Quick Start with Code Generator
 
@@ -58,6 +166,64 @@ make build-codegen
 This automatically creates all necessary files: models, indexer logic, migrations, and documentation.
 
 📖 **[Full Code Generator Documentation](./internal/codegen/README.md)**
+
+### 🐳 Docker Deployment
+
+ChainIndexor can be easily deployed using Docker:
+
+**Build the image:**
+
+```bash
+docker build -t chainindexor:latest .
+```
+
+**Run with docker-compose:**
+
+```bash
+# Copy and edit the example config
+cp config.example.yaml config.yaml
+# Edit config.yaml with your settings
+
+# Start the service
+docker-compose up -d
+
+# View logs
+docker-compose logs -f
+
+# Stop the service
+docker-compose down
+```
+
+**Run directly with Docker:**
+
+```bash
+docker run -d \
+  --name chainindexor \
+  -v $(pwd)/config.yaml:/app/config.yaml:ro \
+  -v chainindexor-data:/app/data \
+  -p 9090:9090 \
+  chainindexor:latest
+```
+
+**Using the code generator in Docker:**
+
+```bash
+docker run --rm \
+  -v $(pwd)/indexers:/app/indexers \
+  chainindexor:latest \
+  /app/indexer-gen \
+    --name ERC20 \
+    --event "Transfer(address,address,uint256)" \
+    --output /app/indexers/erc20
+```
+
+The Docker image includes:
+
+- Both `indexer` and `indexer-gen` binaries
+- All example configuration files
+- Non-root user for security
+- Health checks and proper signal handling
+- Optimized multi-stage build for minimal image size
 
 ### Manual Setup
 

@@ -91,6 +91,7 @@ go run ./cmd/indexer
 
 - `indexer.go` - Main indexer implementation
 - `models.go` - Event struct definitions
+- `register.go` - Registry integration (for using with ChainIndexor binary)
 - `migrations/migrations.go` - Database schema and migrations
 
 ## Customization

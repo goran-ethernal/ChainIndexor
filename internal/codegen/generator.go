@@ -27,6 +27,7 @@ type Generator struct {
 type GeneratedFiles struct {
 	IndexerFile    string // Path to indexer.go
 	ModelsFile     string // Path to models.go
+	RegisterFile   string // Path to register.go
 	MigrationsFile string // Path to migrations/migrations.go
 	ReadmeFile     string // Path to README.md
 }
@@ -107,6 +108,7 @@ func (g *Generator) Generate() (*GeneratedFiles, error) {
 	fileGens := []fileGen{
 		{&files.ModelsFile, RenderModels, "models.go", "models"},
 		{&files.IndexerFile, RenderIndexer, "indexer.go", "indexer"},
+		{&files.RegisterFile, RenderRegister, "register.go", "register"},
 		{&files.MigrationsFile, RenderMigrations, "migrations/migrations.go", "migrations"},
 		{nil, RenderInitialSQL, "migrations/001_initial.sql", "initial SQL"},
 		{&files.ReadmeFile, RenderReadme, "README.md", "readme"},
@@ -231,6 +233,7 @@ func (g *Generator) PrintSummary(files *GeneratedFiles) {
 	fmt.Println("\nGenerated files:")
 	fmt.Printf("  • %s\n", files.IndexerFile)
 	fmt.Printf("  • %s\n", files.ModelsFile)
+	fmt.Printf("  • %s\n", files.RegisterFile)
 	fmt.Printf("  • %s\n", files.MigrationsFile)
 	fmt.Printf("  • %s\n", files.ReadmeFile)
 
@@ -239,6 +242,7 @@ func (g *Generator) PrintSummary(files *GeneratedFiles) {
 	fmt.Println("  2. Add to your config.yaml:")
 	fmt.Printf("     indexers:\n")
 	fmt.Printf("       - name: \"%sIndexer\"\n", g.Name)
+	fmt.Printf("         type: \"%s\"  # Indexer type for registry\n", strings.ToLower(g.Name))
 	fmt.Printf("         start_block: 0\n")
 	fmt.Printf("         db:\n")
 	fmt.Printf("           path: \"./data/%s.sqlite\"\n", strings.ToLower(g.Name))

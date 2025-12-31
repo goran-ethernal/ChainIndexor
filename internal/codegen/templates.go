@@ -14,6 +14,9 @@ var modelsTemplate string
 //go:embed templates/indexer.go.tmpl
 var indexerTemplate string
 
+//go:embed templates/register.go.tmpl
+var registerTemplate string
+
 //go:embed templates/migrations.go.tmpl
 var migrationsTemplate string
 
@@ -39,6 +42,11 @@ func RenderModels(data *TemplateData) (string, error) {
 // RenderIndexer generates the indexer.go file content.
 func RenderIndexer(data *TemplateData) (string, error) {
 	return renderTemplate("indexer", indexerTemplate, data)
+}
+
+// RenderRegister generates the register.go file content.
+func RenderRegister(data *TemplateData) (string, error) {
+	return renderTemplate("register", registerTemplate, data)
 }
 
 // RenderMigrations generates the migrations/migrations.go file content.

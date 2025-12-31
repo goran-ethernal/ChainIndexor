@@ -43,6 +43,7 @@ This creates:
 indexers/erc20/
 ├── indexer.go                      # Main indexer implementation
 ├── models.go                       # Event struct definitions
+├── register.go                     # Registry integration
 ├── migrations/
 │   ├── migrations.go               # Migration runner
 │   └── 001_initial.sql             # Database schema
@@ -163,6 +164,24 @@ type Transfer struct {
     Value       string      `meddler:"value"`
 }
 ```
+
+### register.go
+
+Automatically registers the indexer with ChainIndexor's registry system:
+
+```go
+func init() {
+    indexer.Register("erc20", func(cfg config.IndexerConfig, log *logger.Logger) (indexer.Indexer, error) {
+        return NewERC20Indexer(cfg, log)
+    })
+}
+```
+
+This allows the indexer to be:
+
+- Used with the ChainIndexor binary (just add `type: "erc20"` in config)
+- Discovered by `./bin/indexer list`
+- Created automatically from configuration
 
 ### indexer.go
 
