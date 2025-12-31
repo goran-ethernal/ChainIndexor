@@ -23,7 +23,13 @@ var (
 func Register(indexerType string, factory Factory) {
 	mu.Lock()
 	defer mu.Unlock()
-	registry[strings.ToLower(indexerType)] = factory
+	name := strings.ToLower(indexerType)
+	if _, exists := registry[name]; exists {
+		logger.GetDefaultLogger().Infof("indexer with name %s already in indexer registry."+
+			"It will be overwritten.", name)
+	}
+
+	registry[name] = factory
 }
 
 // GetFactory returns the factory for the given indexer type.

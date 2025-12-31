@@ -26,8 +26,8 @@ const (
 	version = "1.0.0"
 	banner  = `
 ╔═══════════════════════════════════════════╗
-║         ChainIndexor v%s               	║
-║   Blockchain Event Indexing Framework    	║
+║         ChainIndexor v%s                  ║
+║   Blockchain Event Indexing Framework     ║
 ╚═══════════════════════════════════════════╝
 `
 )
@@ -179,6 +179,11 @@ func runIndexer(cmd *cobra.Command, args []string) error {
 
 	// Register indexers from configuration
 	log.Infof("Registering %d indexer(s)...", len(cfg.Indexers))
+	if len(cfg.Indexers) == 0 {
+		log.Warn("No indexers configured. Exiting.")
+		return nil
+	}
+
 	for i, idxCfg := range cfg.Indexers {
 		if idxCfg.Type == "" {
 			return fmt.Errorf("indexer #%d (%s) is missing 'type' field in configuration", i+1, idxCfg.Name)

@@ -21,14 +21,20 @@ services:
     # command: ["--config", "config.yaml"]
     
     # Resource limits (adjust as needed)
-    deploy:
-      resources:
-        limits:
-          cpus: '2'
-          memory: 2G
-        reservations:
-          cpus: '1'
-          memory: 512M
+    # Note: For non-swarm mode, use these v2-compatible limits:
+    mem_limit: 2g
+    mem_reservation: 512m
+    cpus: 2
+    
+    # Alternatively, for Swarm mode, use deploy section:
+    # deploy:
+    #   resources:
+    #     limits:
+    #       cpus: '2'
+    #       memory: 2G
+    #     reservations:
+    #       cpus: '1'
+    #       memory: 512M
 
 volumes:
   chainindexor-data:

@@ -180,7 +180,7 @@ func init() {
 This allows the indexer to be:
 
 - Used with the ChainIndexor binary (just add `type: "erc20"` in config)
-- Discovered by `./bin/indexer --list-indexers`
+- Discovered by `./bin/indexer list`
 - Created automatically from configuration
 
 ### indexer.go

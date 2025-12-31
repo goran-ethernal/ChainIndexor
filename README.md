@@ -113,7 +113,7 @@ go install github.com/goran-ethernal/ChainIndexor/cmd/indexer@latest
 **List available indexer types:**
 
 ```bash
-./bin/indexer --list-indexers
+./bin/indexer list
 ```
 
 **Run with configuration:**

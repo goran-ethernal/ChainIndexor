@@ -8,31 +8,31 @@ This guide explains how to deploy ChainIndexor using Docker.
 
 1. **Prepare your configuration:**
 
-```bash
-# Copy example config
-cp config.example.yaml config.yaml
+    ```bash
+    # Copy example config
+    cp config.example.yaml config.yaml
 
-# Edit with your settings
-nano config.yaml
-```
+    # Edit with your settings
+    nano config.yaml
+    ```
 
-1. **Start the service:**
+2. **Start the service:**
 
-```bash
-docker-compose up -d
-```
+    ```bash
+    docker-compose up -d
+    ```
 
-1. **View logs:**
+3. **View logs:**
 
-```bash
-docker-compose logs -f chainindexor
-```
+    ```bash
+    docker-compose logs -f chainindexor
+    ```
 
-1. **Stop the service:**
+4. **Stop the service:**
 
-```bash
-docker-compose down
-```
+    ```bash
+    docker-compose down
+    ```
 
 ### Using Docker Directly
 
@@ -99,18 +99,34 @@ The Docker setup uses two types of volumes:
 
 ### Resource Limits
 
-Adjust resource limits in `docker-compose.yml`:
+Adjust resource limits in `docker-compose.yml`.
+
+**For regular Docker Compose (non-swarm):**
 
 ```yaml
-deploy:
-  resources:
-    limits:
-      cpus: '4'
-      memory: 4G
-    reservations:
-      cpus: '2'
-      memory: 1G
+services:
+  chainindexor:
+    mem_limit: 4g
+    mem_reservation: 1g
+    cpus: 4
 ```
+
+**For Docker Swarm mode:**
+
+```yaml
+services:
+  chainindexor:
+    deploy:
+      resources:
+        limits:
+          cpus: '4'
+          memory: 4G
+        reservations:
+          cpus: '2'
+          memory: 1G
+```
+
+> **Note**: The `deploy` section is primarily for Docker Swarm mode. For standard Docker Compose usage, use the v2-compatible syntax (`mem_limit`, `mem_reservation`, `cpus`) which works reliably across Docker Compose versions.
 
 ## Using the Code Generator
 
