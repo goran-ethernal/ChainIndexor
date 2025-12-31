@@ -1,0 +1,35 @@
+version: '3.8'
+
+services:
+  chainindexor:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: chainindexor
+    restart: unless-stopped
+    volumes:
+      # Mount your config file
+      - ./config.yaml:/app/config.yaml:ro
+      # Persist data
+      - chainindexor-data:/app/data
+    ports:
+      # Expose metrics port (if enabled in config)
+      - "9090:9090"
+    environment:
+      - TZ=UTC
+    # Override command if needed
+    # command: ["--config", "config.yaml"]
+    
+    # Resource limits (adjust as needed)
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 2G
+        reservations:
+          cpus: '1'
+          memory: 512M
+
+volumes:
+  chainindexor-data:
+    driver: local

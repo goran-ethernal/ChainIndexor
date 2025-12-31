@@ -1,0 +1,47 @@
+# Binaries
+bin/
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Test and coverage
+*.test
+*.out
+coverage.txt
+coverage.html
+
+# Data directories
+data/
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Git
+.git/
+.gitignore
+
+# Documentation build artifacts
+docs/_build/
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+test-config.yaml
+
+# CI/CD
+.github/
+
+# Docker
+Dockerfile
+.dockerignore
+docker-compose.yml

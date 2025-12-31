@@ -20,6 +20,7 @@ ChainIndexor is designed to:
 
 - **Modular Indexer Framework**: Easily add custom indexers for any contract/event.
 - **Code Generation**: Automatically generate production-ready indexers from event signatures. See [Code Generator Documentation](./internal/codegen/README.md).
+- **Docker Support**: Production-ready Docker and docker-compose configurations. See [Docker Deployment Guide](./DOCKER.md).
 - **Recursive Log Fetching**: Automatically splits queries to handle RPC "too many results" errors.
 - **Reorg Detection & Recovery**: Detects chain reorganizations and safely rolls back indexed data.
 - **Configurable Database Backend**: Uses SQLite with connection pooling, PRAGMA tuning, and schema migrations.
@@ -165,6 +166,64 @@ make build-codegen
 This automatically creates all necessary files: models, indexer logic, migrations, and documentation.
 
 📖 **[Full Code Generator Documentation](./internal/codegen/README.md)**
+
+### 🐳 Docker Deployment
+
+ChainIndexor can be easily deployed using Docker:
+
+**Build the image:**
+
+```bash
+docker build -t chainindexor:latest .
+```
+
+**Run with docker-compose:**
+
+```bash
+# Copy and edit the example config
+cp config.example.yaml config.yaml
+# Edit config.yaml with your settings
+
+# Start the service
+docker-compose up -d
+
+# View logs
+docker-compose logs -f
+
+# Stop the service
+docker-compose down
+```
+
+**Run directly with Docker:**
+
+```bash
+docker run -d \
+  --name chainindexor \
+  -v $(pwd)/config.yaml:/app/config.yaml:ro \
+  -v chainindexor-data:/app/data \
+  -p 9090:9090 \
+  chainindexor:latest
+```
+
+**Using the code generator in Docker:**
+
+```bash
+docker run --rm \
+  -v $(pwd)/indexers:/app/indexers \
+  chainindexor:latest \
+  /app/indexer-gen \
+    --name ERC20 \
+    --event "Transfer(address,address,uint256)" \
+    --output /app/indexers/erc20
+```
+
+The Docker image includes:
+
+- Both `indexer` and `indexer-gen` binaries
+- All example configuration files
+- Non-root user for security
+- Health checks and proper signal handling
+- Optimized multi-stage build for minimal image size
 
 ### Manual Setup
 
