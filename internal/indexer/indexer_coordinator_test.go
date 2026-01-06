@@ -6,7 +6,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
-	"github.com/goran-ethernal/ChainIndexor/internal/indexer/mocks"
+	"github.com/goran-ethernal/ChainIndexor/pkg/indexer/mocks"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -57,7 +57,7 @@ func TestIndexerCoordinator_HandleLogsRoutesByAddressAndTopic(t *testing.T) {
 	logEntry := newTestLog(addr, topic, 1)
 
 	idx := mocks.NewIndexer(t)
-	idx.EXPECT().Name().Return("testIndexer")
+	idx.EXPECT().GetName().Return("testIndexer")
 	idx.EXPECT().StartBlock().Return(uint64(0))
 	idx.EXPECT().EventsToIndex().Return(map[common.Address]map[common.Hash]struct{}{
 		addr: {topic: {}},
@@ -82,7 +82,7 @@ func TestIndexerCoordinator_HandleLogsIgnoresLogsBeforeStartBlock(t *testing.T) 
 	logEntry := newTestLog(addr, topic, 5)
 
 	idx := mocks.NewIndexer(t)
-	idx.EXPECT().Name().Return("testIndexer")
+	idx.EXPECT().GetName().Return("testIndexer")
 	idx.EXPECT().StartBlock().Return(uint64(10))
 	idx.EXPECT().EventsToIndex().Return(map[common.Address]map[common.Hash]struct{}{
 		addr: {topic: {}},
@@ -104,7 +104,7 @@ func TestIndexerCoordinator_HandleLogsFiltersLogsAtExactStartBlock(t *testing.T)
 	logEntry := newTestLog(addr, topic, 10)
 
 	idx := mocks.NewIndexer(t)
-	idx.EXPECT().Name().Return("testIndexer")
+	idx.EXPECT().GetName().Return("testIndexer")
 	idx.EXPECT().StartBlock().Return(uint64(10))
 	idx.EXPECT().EventsToIndex().Return(map[common.Address]map[common.Hash]struct{}{
 		addr: {topic: {}},
@@ -133,7 +133,7 @@ func TestIndexerCoordinator_HandleLogsSupportsAllTopics(t *testing.T) {
 	logEntry := newTestLog(addr, topic, 1)
 
 	idx := mocks.NewIndexer(t)
-	idx.EXPECT().Name().Return("testIndexer")
+	idx.EXPECT().GetName().Return("testIndexer")
 	idx.EXPECT().StartBlock().Return(uint64(0))
 	idx.EXPECT().EventsToIndex().Return(map[common.Address]map[common.Hash]struct{}{
 		addr: {}, // Empty topic set means all topics
@@ -162,7 +162,7 @@ func TestIndexerCoordinator_HandleLogsRoutesToMultipleIndexers(t *testing.T) {
 	logEntry := newTestLog(addr, topic, 1)
 
 	idx1 := mocks.NewIndexer(t)
-	idx1.EXPECT().Name().Return("testIndexer1")
+	idx1.EXPECT().GetName().Return("testIndexer1")
 	idx1.EXPECT().StartBlock().Return(uint64(0))
 	idx1.EXPECT().EventsToIndex().Return(map[common.Address]map[common.Hash]struct{}{
 		addr: {topic: {}},
@@ -171,7 +171,7 @@ func TestIndexerCoordinator_HandleLogsRoutesToMultipleIndexers(t *testing.T) {
 	idx1.On("HandleLogs", mock.Anything).Return(nil).Run(captureHandledLogs(&handled1))
 
 	idx2 := mocks.NewIndexer(t)
-	idx2.EXPECT().Name().Return("testIndexer2")
+	idx2.EXPECT().GetName().Return("testIndexer2")
 	idx2.EXPECT().StartBlock().Return(uint64(0))
 	idx2.EXPECT().EventsToIndex().Return(map[common.Address]map[common.Hash]struct{}{
 		addr: {topic: {}},
@@ -241,7 +241,7 @@ func TestIndexerCoordinator_HandleLogsPropagatesErrors(t *testing.T) {
 	logEntry := newTestLog(addr, topic, 1)
 
 	idx := mocks.NewIndexer(t)
-	idx.EXPECT().Name().Return("testIndexer")
+	idx.EXPECT().GetName().Return("testIndexer")
 	idx.EXPECT().StartBlock().Return(uint64(0))
 	idx.EXPECT().EventsToIndex().Return(map[common.Address]map[common.Hash]struct{}{
 		addr: {topic: {}},
@@ -267,7 +267,7 @@ func TestIndexerCoordinator_HandleLogsWithMultipleLogs(t *testing.T) {
 	log3 := newTestLog(addr, topic, 3)
 
 	idx := mocks.NewIndexer(t)
-	idx.EXPECT().Name().Return("testIndexer")
+	idx.EXPECT().GetName().Return("testIndexer")
 	idx.EXPECT().StartBlock().Return(uint64(0))
 	idx.EXPECT().EventsToIndex().Return(map[common.Address]map[common.Hash]struct{}{
 		addr: {topic: {}},
@@ -399,7 +399,7 @@ func TestIndexerCoordinator_HandleLogsWithMixedStartBlocks(t *testing.T) {
 
 	// Indexer 1 starts at block 10
 	idx1 := mocks.NewIndexer(t)
-	idx1.EXPECT().Name().Return("testIndexer1")
+	idx1.EXPECT().GetName().Return("testIndexer1")
 	idx1.EXPECT().StartBlock().Return(uint64(10))
 	idx1.EXPECT().EventsToIndex().Return(map[common.Address]map[common.Hash]struct{}{
 		addr: {topic: {}},
@@ -409,7 +409,7 @@ func TestIndexerCoordinator_HandleLogsWithMixedStartBlocks(t *testing.T) {
 
 	// Indexer 2 starts at block 20
 	idx2 := mocks.NewIndexer(t)
-	idx2.EXPECT().Name().Return("testIndexer2")
+	idx2.EXPECT().GetName().Return("testIndexer2")
 	idx2.EXPECT().StartBlock().Return(uint64(20))
 	idx2.EXPECT().EventsToIndex().Return(map[common.Address]map[common.Hash]struct{}{
 		addr: {topic: {}},
@@ -450,7 +450,7 @@ func TestIndexerCoordinator_HandleLogsDeduplicatesLogPerIndexer(t *testing.T) {
 
 	// Indexer interested in the same address with all topics
 	idx := mocks.NewIndexer(t)
-	idx.EXPECT().Name().Return("testIndexer")
+	idx.EXPECT().GetName().Return("testIndexer")
 	idx.EXPECT().StartBlock().Return(uint64(0))
 	idx.EXPECT().EventsToIndex().Return(map[common.Address]map[common.Hash]struct{}{
 		addr: {}, // All topics

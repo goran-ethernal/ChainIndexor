@@ -172,6 +172,11 @@ func (d *Downloader) getDownloaderStartBlock() uint64 {
 	return minStartBlock
 }
 
+// Coordinator returns the indexer coordinator for API access.
+func (d *Downloader) Coordinator() *indexer.IndexerCoordinator {
+	return d.coordinator
+}
+
 // Download starts the download process, streaming logs to registered indexers.
 // It continues until the context is cancelled or an error occurs.
 func (d *Downloader) Download(ctx context.Context, cfg config.Config) error {

@@ -18,6 +18,7 @@ import (
 	downloadermig "github.com/goran-ethernal/ChainIndexor/internal/migrations"
 	"github.com/goran-ethernal/ChainIndexor/internal/reorg"
 	"github.com/goran-ethernal/ChainIndexor/internal/rpc"
+	"github.com/goran-ethernal/ChainIndexor/pkg/api"
 	"github.com/goran-ethernal/ChainIndexor/pkg/indexer"
 	"github.com/spf13/cobra"
 )
@@ -26,7 +27,7 @@ const (
 	version = "1.0.0"
 	banner  = `
 ╔═══════════════════════════════════════════╗
-║         ChainIndexor v%s                  ║
+║         ChainIndexor v%s               ║
 ║   Blockchain Event Indexing Framework     ║
 ╚═══════════════════════════════════════════╝
 `
@@ -202,6 +203,20 @@ func runIndexer(cmd *cobra.Command, args []string) error {
 
 		dl.RegisterIndexer(idx)
 		log.Infof("✓ Registered indexer: %s", idxCfg.Name)
+	}
+
+	// Start API server if enabled
+	if cfg.API != nil && cfg.API.Enabled {
+		apiServer := api.NewServer(
+			cfg.API,
+			dl.Coordinator(),
+			logger.NewComponentLoggerFromConfig(common.ComponentAPI, cfg.Logging),
+		)
+		go func() {
+			if err := apiServer.Start(ctx); err != nil {
+				log.Errorf("API server error: %v", err)
+			}
+		}()
 	}
 
 	// Start indexing

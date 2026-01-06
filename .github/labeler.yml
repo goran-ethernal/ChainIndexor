@@ -55,3 +55,7 @@ codegen:
     - any-glob-to-any-file: 'cmd/indexer-gen/**'
   - changed-files:
     - any-glob-to-any-file: 'internal/codegen/**'
+
+api:
+  - changed-files:
+    - any-glob-to-any-file: 'pkg/api/**'

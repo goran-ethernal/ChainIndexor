@@ -9,6 +9,12 @@ import (
 	"github.com/goran-ethernal/ChainIndexor/internal/logger"
 )
 
+const (
+	defaultReadTimeout  = 30 * time.Second
+	defaultWriteTimeout = 30 * time.Second
+	defaultIdleTimeout  = 120 * time.Second
+)
+
 // Config represents the complete configuration for the ChainIndexor.
 type Config struct {
 	// Downloader contains the downloader configuration
@@ -22,6 +28,9 @@ type Config struct {
 
 	// Metrics contains Prometheus metrics configuration
 	Metrics *MetricsConfig `yaml:"metrics,omitempty" json:"metrics,omitempty" toml:"metrics,omitempty"`
+
+	// API contains REST API configuration
+	API *APIConfig `yaml:"api,omitempty" json:"api,omitempty" toml:"api,omitempty"`
 }
 
 // DownloaderConfig represents the configuration for the downloader.
@@ -402,6 +411,11 @@ func (c *Config) ApplyDefaults() {
 	if c.Metrics != nil {
 		c.Metrics.ApplyDefaults()
 	}
+
+	// Apply API defaults
+	if c.API != nil {
+		c.API.ApplyDefaults()
+	}
 }
 
 // Validate checks if the configuration is valid.
@@ -457,6 +471,13 @@ func (c *Config) Validate() error {
 		}
 	}
 
+	// Validate API configuration
+	if c.API != nil {
+		if err := c.API.Validate(); err != nil {
+			return fmt.Errorf("api: %w", err)
+		}
+	}
+
 	if len(c.Indexers) == 0 {
 		return fmt.Errorf("at least one indexer must be configured")
 	}
@@ -489,6 +510,80 @@ func (c *Config) Validate() error {
 				return fmt.Errorf("indexer[%d] (%s), contract[%d]: at least one event must be configured", i, indexer.Name, j)
 			}
 		}
+	}
+
+	return nil
+}
+
+// APIConfig represents the configuration for the REST API server.
+type APIConfig struct {
+	// Enabled enables or disables the API server
+	Enabled bool `yaml:"enabled" json:"enabled" toml:"enabled"`
+
+	// ListenAddress is the address to listen on (e.g., ":8080", "0.0.0.0:8080")
+	ListenAddress string `yaml:"listen_address" json:"listen_address" toml:"listen_address"`
+
+	// ReadTimeout is the maximum duration for reading the entire request (default: 30s)
+	ReadTimeout common.Duration `yaml:"read_timeout" json:"read_timeout" toml:"read_timeout"`
+
+	// WriteTimeout is the maximum duration for writing the response (default: 30s)
+	WriteTimeout common.Duration `yaml:"write_timeout" json:"write_timeout" toml:"write_timeout"`
+
+	// IdleTimeout is the maximum duration to wait for the next request when keep-alives are enabled (default: 120s)
+	IdleTimeout common.Duration `yaml:"idle_timeout" json:"idle_timeout" toml:"idle_timeout"`
+
+	// CORS contains CORS configuration
+	CORS CORSConfig `yaml:"cors" json:"cors" toml:"cors"`
+}
+
+// CORSConfig represents CORS configuration.
+type CORSConfig struct {
+	// Enabled enables or disables CORS
+	Enabled bool `yaml:"enabled" json:"enabled" toml:"enabled"`
+
+	// AllowedOrigins is the list of allowed origins (use ["*"] for all)
+	AllowedOrigins []string `yaml:"allowed_origins" json:"allowed_origins" toml:"allowed_origins"`
+}
+
+// ApplyDefaults sets default values for optional API configuration fields.
+func (a *APIConfig) ApplyDefaults() {
+	if a.ListenAddress == "" {
+		a.ListenAddress = ":8080"
+	}
+
+	if a.ReadTimeout.Duration == 0 {
+		a.ReadTimeout = common.NewDuration(defaultReadTimeout)
+	}
+
+	if a.WriteTimeout.Duration == 0 {
+		a.WriteTimeout = common.NewDuration(defaultWriteTimeout)
+	}
+
+	if a.IdleTimeout.Duration == 0 {
+		a.IdleTimeout = common.NewDuration(defaultIdleTimeout)
+	}
+}
+
+// Validate checks if the API configuration is valid.
+func (a *APIConfig) Validate() error {
+	if !a.Enabled {
+		return nil
+	}
+
+	if a.ListenAddress == "" {
+		return fmt.Errorf("listen_address is required when API is enabled")
+	}
+
+	if a.ReadTimeout.Duration < 0 {
+		return fmt.Errorf("read_timeout must be non-negative")
+	}
+
+	if a.WriteTimeout.Duration < 0 {
+		return fmt.Errorf("write_timeout must be non-negative")
+	}
+
+	if a.IdleTimeout.Duration < 0 {
+		return fmt.Errorf("idle_timeout must be non-negative")
 	}
 
 	return nil

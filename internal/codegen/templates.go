@@ -17,6 +17,9 @@ var indexerTemplate string
 //go:embed templates/register.go.tmpl
 var registerTemplate string
 
+//go:embed templates/api.go.tmpl
+var apiTemplate string
+
 //go:embed templates/migrations.go.tmpl
 var migrationsTemplate string
 
@@ -47,6 +50,34 @@ func RenderIndexer(data *TemplateData) (string, error) {
 // RenderRegister generates the register.go file content.
 func RenderRegister(data *TemplateData) (string, error) {
 	return renderTemplate("register", registerTemplate, data)
+}
+
+// RenderAPI generates the api.go file content.
+func RenderAPI(data *TemplateData) (string, error) {
+	// Add table prefix to the data
+	tablePrefix := strings.ToLower(data.Name)
+
+	// Create a custom data struct that includes table prefix
+	apiData := struct {
+		*TemplateData
+		TablePrefix string
+	}{
+		TemplateData: data,
+		TablePrefix:  tablePrefix,
+	}
+
+	// Parse and execute template directly with custom data
+	tmpl, err := template.New("api").Funcs(templateFuncs()).Parse(apiTemplate)
+	if err != nil {
+		return "", fmt.Errorf("failed to parse template: %w", err)
+	}
+
+	var buf bytes.Buffer
+	if err := tmpl.Execute(&buf, apiData); err != nil {
+		return "", fmt.Errorf("failed to execute template: %w", err)
+	}
+
+	return buf.String(), nil
 }
 
 // RenderMigrations generates the migrations/migrations.go file content.
@@ -92,6 +123,7 @@ func templateFuncs() template.FuncMap {
 		"ToPascalCase":     ToPascalCase,
 		"ToSnakeCase":      ToSnakeCase,
 		"ToLowerCamelCase": ToLowerCamelCase,
+		"ToLower":          strings.ToLower,
 
 		// String manipulation
 		"Pluralize": Pluralize,

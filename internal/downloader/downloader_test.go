@@ -37,7 +37,11 @@ func (m *mockIndexer) StartBlock() uint64 {
 	return m.startBlock
 }
 
-func (m *mockIndexer) Name() string {
+func (m *mockIndexer) GetType() string {
+	return "mock"
+}
+
+func (m *mockIndexer) GetName() string {
 	return "mockIndexer"
 }
 
