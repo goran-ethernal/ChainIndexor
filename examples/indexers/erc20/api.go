@@ -102,15 +102,28 @@ func (idx *ERC20Indexer) QueryEvents(ctx context.Context, params indexer.QueryPa
 		return nil, 0, fmt.Errorf("failed to get total count: %w", err)
 	}
 
-	// Apply sorting
-	sortBy := "block_number"
-	if params.SortBy != "" {
-		sortBy = params.SortBy
+	// Apply sorting with whitelist to prevent SQL injection
+	allowedSortColumns := map[string]bool{
+		"block_number": true,
+		"tx_index":     true,
+		"log_index":    true,
 	}
-	sortOrder := "DESC"
-	if params.SortOrder == "asc" {
+	
+	sortBy := "block_number" // default
+	if params.SortBy != "" {
+		// Validate sort column is in whitelist
+		if allowedSortColumns[params.SortBy] {
+			sortBy = params.SortBy
+		}
+		// If not in whitelist, silently use default (block_number)
+	}
+	
+	// Validate sort order (only allow ASC or DESC, case-insensitive)
+	sortOrder := "DESC" // default
+	if strings.ToLower(params.SortOrder) == "asc" {
 		sortOrder = "ASC"
 	}
+	
 	query += fmt.Sprintf(" ORDER BY %s %s", sortBy, sortOrder)
 
 	// Apply pagination

@@ -1,7 +1,6 @@
 package api
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -156,7 +155,7 @@ func (h *Handler) Health(w http.ResponseWriter, r *http.Request) {
 	var statuses []IndexerStatus
 	for _, idx := range indexers {
 		if queryable, ok := idx.(indexer.Queryable); ok {
-			stats, err := queryable.GetStats(context.Background())
+			stats, err := queryable.GetStats(r.Context())
 			status := IndexerStatus{
 				Name:    idx.GetName(),
 				Type:    idx.GetType(),
@@ -249,9 +248,23 @@ func parseQueryParams(r *http.Request) (*indexer.QueryParams, error) {
 // respondJSON sends a JSON response.
 func respondJSON(w http.ResponseWriter, status int, data any) {
 	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	if err := json.NewEncoder(w).Encode(data); err != nil {
+
+	// Encode JSON first to catch any errors before writing status
+	encoded, err := json.Marshal(data)
+	if err != nil {
+		// Log the error but we can still set proper status since headers haven't been sent
 		http.Error(w, "Failed to encode response", http.StatusInternalServerError)
+		return
+	}
+
+	// Only write status after successful encoding
+	w.WriteHeader(status)
+
+	// Write the encoded JSON
+	if _, err := w.Write(encoded); err != nil {
+		// Headers already sent, can only log the error
+		// The partial response may have been sent to client
+		return
 	}
 }
 

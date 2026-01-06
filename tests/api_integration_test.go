@@ -299,7 +299,7 @@ func TestAPI_IntegrationWithERC20(t *testing.T) {
 		require.True(t, ok)
 		require.Equal(t, float64(4), pagination["total"])
 
-		t.Log("✓ Query all transfers: 3 events returned")
+		t.Log("✓ Query all transfers: 3 transfer events returned and 1 deployment")
 	})
 
 	// Test 5: Pagination
@@ -435,23 +435,23 @@ func TestAPI_IntegrationWithERC20(t *testing.T) {
 	})
 
 	// Test 12: Error - Missing event_type
-	t.Run("GET /api/v1/indexers/{name}/events - 400", func(t *testing.T) {
+	t.Run("GET /api/v1/indexers/{name}/events - 500", func(t *testing.T) {
 		resp, err := http.Get(baseURL + "/api/v1/indexers/TestERC20Indexer/events")
 		require.NoError(t, err)
 		defer resp.Body.Close()
 		require.Equal(t, http.StatusInternalServerError, resp.StatusCode) // Current API returns 500 for query errors
 
-		t.Log("✓ Missing event_type returns 400")
+		t.Log("✓ Missing event_type returns 500")
 	})
 
 	// Test 13: Error - Invalid event_type
-	t.Run("GET /api/v1/indexers/{name}/events?event_type=invalid - 400", func(t *testing.T) {
+	t.Run("GET /api/v1/indexers/{name}/events?event_type=invalid - 500", func(t *testing.T) {
 		resp, err := http.Get(baseURL + "/api/v1/indexers/TestERC20Indexer/events?event_type=invalid")
 		require.NoError(t, err)
 		defer resp.Body.Close()
 		require.Equal(t, http.StatusInternalServerError, resp.StatusCode) // Current API returns 500 for query errors
 
-		t.Log("✓ Invalid event_type returns 400")
+		t.Log("✓ Invalid event_type returns 500")
 	})
 
 	// Test 14: CORS headers
