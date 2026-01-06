@@ -70,6 +70,96 @@ func (_c *Indexer_EventsToIndex_Call) RunAndReturn(run func() map[common.Address
 	return _c
 }
 
+// GetName provides a mock function with no fields
+func (_m *Indexer) GetName() string {
+	ret := _m.Called()
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetName")
+	}
+
+	var r0 string
+	if rf, ok := ret.Get(0).(func() string); ok {
+		r0 = rf()
+	} else {
+		r0 = ret.Get(0).(string)
+	}
+
+	return r0
+}
+
+// Indexer_GetName_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetName'
+type Indexer_GetName_Call struct {
+	*mock.Call
+}
+
+// GetName is a helper method to define mock.On call
+func (_e *Indexer_Expecter) GetName() *Indexer_GetName_Call {
+	return &Indexer_GetName_Call{Call: _e.mock.On("GetName")}
+}
+
+func (_c *Indexer_GetName_Call) Run(run func()) *Indexer_GetName_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run()
+	})
+	return _c
+}
+
+func (_c *Indexer_GetName_Call) Return(_a0 string) *Indexer_GetName_Call {
+	_c.Call.Return(_a0)
+	return _c
+}
+
+func (_c *Indexer_GetName_Call) RunAndReturn(run func() string) *Indexer_GetName_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// GetType provides a mock function with no fields
+func (_m *Indexer) GetType() string {
+	ret := _m.Called()
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetType")
+	}
+
+	var r0 string
+	if rf, ok := ret.Get(0).(func() string); ok {
+		r0 = rf()
+	} else {
+		r0 = ret.Get(0).(string)
+	}
+
+	return r0
+}
+
+// Indexer_GetType_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetType'
+type Indexer_GetType_Call struct {
+	*mock.Call
+}
+
+// GetType is a helper method to define mock.On call
+func (_e *Indexer_Expecter) GetType() *Indexer_GetType_Call {
+	return &Indexer_GetType_Call{Call: _e.mock.On("GetType")}
+}
+
+func (_c *Indexer_GetType_Call) Run(run func()) *Indexer_GetType_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run()
+	})
+	return _c
+}
+
+func (_c *Indexer_GetType_Call) Return(_a0 string) *Indexer_GetType_Call {
+	_c.Call.Return(_a0)
+	return _c
+}
+
+func (_c *Indexer_GetType_Call) RunAndReturn(run func() string) *Indexer_GetType_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // HandleLogs provides a mock function with given fields: logs
 func (_m *Indexer) HandleLogs(logs []types.Log) error {
 	ret := _m.Called(logs)
@@ -158,51 +248,6 @@ func (_c *Indexer_HandleReorg_Call) Return(_a0 error) *Indexer_HandleReorg_Call 
 }
 
 func (_c *Indexer_HandleReorg_Call) RunAndReturn(run func(uint64) error) *Indexer_HandleReorg_Call {
-	_c.Call.Return(run)
-	return _c
-}
-
-// Name provides a mock function with no fields
-func (_m *Indexer) Name() string {
-	ret := _m.Called()
-
-	if len(ret) == 0 {
-		panic("no return value specified for Name")
-	}
-
-	var r0 string
-	if rf, ok := ret.Get(0).(func() string); ok {
-		r0 = rf()
-	} else {
-		r0 = ret.Get(0).(string)
-	}
-
-	return r0
-}
-
-// Indexer_Name_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'Name'
-type Indexer_Name_Call struct {
-	*mock.Call
-}
-
-// Name is a helper method to define mock.On call
-func (_e *Indexer_Expecter) Name() *Indexer_Name_Call {
-	return &Indexer_Name_Call{Call: _e.mock.On("Name")}
-}
-
-func (_c *Indexer_Name_Call) Run(run func()) *Indexer_Name_Call {
-	_c.Call.Run(func(args mock.Arguments) {
-		run()
-	})
-	return _c
-}
-
-func (_c *Indexer_Name_Call) Return(_a0 string) *Indexer_Name_Call {
-	_c.Call.Return(_a0)
-	return _c
-}
-
-func (_c *Indexer_Name_Call) RunAndReturn(run func() string) *Indexer_Name_Call {
 	_c.Call.Return(run)
 	return _c
 }

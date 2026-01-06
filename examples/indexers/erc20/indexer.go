@@ -77,8 +77,13 @@ func NewERC20Indexer(cfg config.IndexerConfig, log *logger.Logger) (*ERC20Indexe
 	}, nil
 }
 
-// Name returns the name of the indexer.
-func (idx *ERC20Indexer) Name() string {
+// GetType returns the type identifier of the indexer.
+func (idx *ERC20Indexer) GetType() string {
+	return "erc20"
+}
+
+// GetName returns the configured name of the indexer instance.
+func (idx *ERC20Indexer) GetName() string {
 	return idx.cfg.Name
 }
 

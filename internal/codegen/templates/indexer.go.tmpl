@@ -80,8 +80,13 @@ func New{{.Name}}Indexer(cfg config.IndexerConfig, log *logger.Logger) (*{{.Name
 	}, nil
 }
 
-// Name returns the name of the indexer.
-func (idx *{{.Name}}Indexer) Name() string {
+// GetType returns the type identifier of the indexer.
+func (idx *{{.Name}}Indexer) GetType() string {
+	return "{{ToLowerCamelCase .Name}}"
+}
+
+// GetName returns the configured name of the indexer instance.
+func (idx *{{.Name}}Indexer) GetName() string {
 	return idx.cfg.Name
 }
 

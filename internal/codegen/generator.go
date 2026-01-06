@@ -28,6 +28,7 @@ type GeneratedFiles struct {
 	IndexerFile    string // Path to indexer.go
 	ModelsFile     string // Path to models.go
 	RegisterFile   string // Path to register.go
+	APIFile        string // Path to api.go
 	MigrationsFile string // Path to migrations/migrations.go
 	ReadmeFile     string // Path to README.md
 }
@@ -109,6 +110,7 @@ func (g *Generator) Generate() (*GeneratedFiles, error) {
 		{&files.ModelsFile, RenderModels, "models.go", "models"},
 		{&files.IndexerFile, RenderIndexer, "indexer.go", "indexer"},
 		{&files.RegisterFile, RenderRegister, "register.go", "register"},
+		{&files.APIFile, RenderAPI, "api.go", "API"},
 		{&files.MigrationsFile, RenderMigrations, "migrations/migrations.go", "migrations"},
 		{nil, RenderInitialSQL, "migrations/001_initial.sql", "initial SQL"},
 		{&files.ReadmeFile, RenderReadme, "README.md", "readme"},
@@ -234,6 +236,7 @@ func (g *Generator) PrintSummary(files *GeneratedFiles) {
 	fmt.Printf("  • %s\n", files.IndexerFile)
 	fmt.Printf("  • %s\n", files.ModelsFile)
 	fmt.Printf("  • %s\n", files.RegisterFile)
+	fmt.Printf("  • %s\n", files.APIFile)
 	fmt.Printf("  • %s\n", files.MigrationsFile)
 	fmt.Printf("  • %s\n", files.ReadmeFile)
 

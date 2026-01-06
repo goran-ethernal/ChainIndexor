@@ -113,7 +113,7 @@ func (ic *IndexerCoordinator) HandleLogs(logs []types.Log, from, to uint64) erro
 	for idx, relevantLogs := range indexerLogs {
 		// Capture loop variables
 		indexer := idx
-		indexerName := indexer.Name()
+		indexerName := indexer.GetName()
 		logs := relevantLogs
 
 		g.Go(func() error {
@@ -176,6 +176,31 @@ func (ic *IndexerCoordinator) IndexerStartBlocks() []uint64 {
 		startBlocks = append(startBlocks, ic.startBlocks[idx])
 	}
 	return startBlocks
+}
+
+// GetByName retrieves an indexer by its configured name.
+// Returns nil if no indexer with the given name is found.
+func (ic *IndexerCoordinator) GetByName(name string) indexer.Indexer {
+	ic.mu.RLock()
+	defer ic.mu.RUnlock()
+
+	for _, idx := range ic.indexers {
+		if idx.GetName() == name {
+			return idx
+		}
+	}
+	return nil
+}
+
+// ListAll returns all registered indexers.
+func (ic *IndexerCoordinator) ListAll() []indexer.Indexer {
+	ic.mu.RLock()
+	defer ic.mu.RUnlock()
+
+	// Return a copy to prevent external modification
+	result := make([]indexer.Indexer, len(ic.indexers))
+	copy(result, ic.indexers)
+	return result
 }
 
 // logMetrics records metrics for the indexing operation.

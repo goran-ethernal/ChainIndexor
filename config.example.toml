@@ -59,3 +59,12 @@ events = [
     "Transfer(address,address,uint256)",
     "Approval(address,address,uint256)"
 ]
+
+# Optional: API server configuration
+[api]
+enabled = true
+listen_address = ":8080"
+
+[api.cors]
+enabled = true
+allowed_origins = ["*"]

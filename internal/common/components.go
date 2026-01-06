@@ -7,6 +7,7 @@ const (
 	ComponentReorgDetector = "reorg-detector"
 	ComponentLogStore      = "log-store"
 	ComponentMaintenance   = "maintenance"
+	ComponentAPI           = "api"
 )
 
 var AllComponents = map[string]struct{}{
@@ -16,4 +17,5 @@ var AllComponents = map[string]struct{}{
 	ComponentReorgDetector: {},
 	ComponentLogStore:      {},
 	ComponentMaintenance:   {},
+	ComponentAPI:           {},
 }

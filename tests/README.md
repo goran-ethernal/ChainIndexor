@@ -42,6 +42,23 @@ contract TestEmitter {
 
 Compiled with `solc` and Go bindings generated with `abigen`.
 
+### API Test Contract (`testdata/TestERC20.sol`)
+
+Minimal ERC20 implementation for testing REST API functionality:
+
+```solidity
+contract TestERC20 {
+    event Transfer(address indexed from, address indexed to, uint256 value);
+    event Approval(address indexed owner, address indexed spender, uint256 value);
+    
+    function transfer(address to, uint256 value) public returns (bool);
+    function approve(address spender, uint256 value) public returns (bool);
+    function transferFrom(address from, address to, uint256 value) public returns (bool);
+}
+```
+
+Used in API integration tests to generate real Transfer and Approval events.
+
 ## Test Scenarios
 
 ### Reorg Integration Tests (`reorg_integration_test.go`)
@@ -70,6 +87,47 @@ Compiled with `solc` and Go bindings generated with `abigen`.
 - Emits multiple events per block on reorg chain
 - Validates log count differences
 
+### API Integration Tests (`api_integration_test.go`)
+
+Comprehensive REST API integration tests that validate all API endpoints using a real ERC20 contract deployment.
+
+#### TestAPI_IntegrationWithERC20
+
+End-to-end test covering all REST API functionality:
+
+**Test Setup:**
+
+- Deploys minimal ERC20 contract (`TestERC20.sol`) to Anvil
+- Generates test transactions (3 transfers, 1 approval)
+- Manually indexes events synchronously using `HandleLogs()`
+- Starts API server and runs 14 test cases
+
+**Test Coverage:**
+
+1. **GET /health** - Health check returns status and indexer info
+2. **GET /api/v1/indexers** - Lists all registered indexers with endpoints
+3. **GET /api/v1/indexers/{name}/stats** - Returns event counts and block ranges
+4. **Query all transfers** - Returns all Transfer events (4 total: 1 deployment + 3 test)
+5. **Pagination** - Tests `limit` and `offset` parameters
+6. **Block filtering** - Tests `from_block` and `to_block` filtering
+7. **Address filtering** - Tests `address` parameter (participant filtering)
+8. **Query approvals** - Returns Approval events separately
+9. **Case-insensitive event_type** - Validates `TRANSFER` works like `transfer`
+10. **Sorting** - Tests `sort_order=desc` for newest-first ordering
+11. **Error: Invalid indexer** - Returns 404 for non-existent indexer
+12. **Error: Missing event_type** - Validates required parameter handling
+13. **Error: Invalid event_type** - Validates event type validation
+14. **CORS headers** - Verifies CORS middleware functionality
+
+**Key Features:**
+
+- Synchronous indexing for deterministic results
+- No async complexity or polling
+- Uses mock coordinator for testing
+- Validates JSON response structures
+- Tests all query parameters
+- Verifies error handling and status codes
+
 ## Prerequisites
 
 ### Install Foundry (includes Anvil)
@@ -93,10 +151,25 @@ anvil --version
 go test -tags=integration -v ./tests/... -timeout 5m
 ```
 
+### Run Reorg Tests Only
+
+```bash
+go test -tags=integration -v ./tests/... -run TestReorg -timeout 5m
+```
+
+### Run API Tests Only
+
+```bash
+go test -v ./tests/... -run TestAPI -timeout 2m
+```
+
+Note: API tests don't require the `integration` build tag as they use a simpler setup.
+
 ### Run Specific Test
 
 ```bash
 go test -tags=integration -v ./tests/... -run TestReorg_SimpleBlockReplacement
+go test -v ./tests/... -run TestAPI_IntegrationWithERC20
 ```
 
 ### Run with Detailed Logging
@@ -107,12 +180,23 @@ go test -tags=integration -v ./tests/... -timeout 5m 2>&1 | tee integration-test
 
 ## Test Execution Flow
 
+### Reorg Tests
+
 1. **Setup**: Start Anvil, create database, initialize RPC client
 2. **Deploy**: Deploy TestEmitter contract to Anvil
 3. **Original Chain**: Mine blocks and emit events
 4. **Record**: Use ReorgDetector to record block hashes
 5. **Simulate Reorg**: Create snapshot, revert, mine alternative blocks
 6. **Verify**: Attempt to record new blocks and verify reorg detection
+
+### API Tests
+
+1. **Setup**: Start Anvil, create database, deploy ERC20 contract
+2. **Generate Data**: Execute transactions (transfers and approvals)
+3. **Index Events**: Manually fetch and index logs synchronously
+4. **Start API Server**: Initialize REST API with mock coordinator
+5. **Test Endpoints**: Run 14 test cases covering all API functionality
+6. **Cleanup**: Gracefully shutdown API server and Anvil
 
 ## CI/CD Integration
 
@@ -290,9 +374,14 @@ func TestReorg_MyNewScenario(t *testing.T) {
 
 Integration tests typically take:
 
-- Simple 2-block reorg: ~5-10 seconds
-- Deep 15-block reorg: ~20-30 seconds
-- Full test suite: ~1-2 minutes
+- **Reorg Tests:**
+  - Simple 2-block reorg: ~5-10 seconds
+  - Deep 15-block reorg: ~20-30 seconds
+  - Full reorg test suite: ~1-2 minutes
+
+- **API Tests:**
+  - API integration test: ~10 seconds
+  - Includes contract deployment, transaction generation, and 14 test cases
 
 Anvil is run with manual mining: blocks are mined when transactions are sent or when tests explicitly call `Mine()`, which keeps tests fast and deterministic.
 
