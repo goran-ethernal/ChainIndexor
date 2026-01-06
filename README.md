@@ -25,6 +25,7 @@ ChainIndexor is designed to:
 - **Reorg Detection & Recovery**: Detects chain reorganizations and safely rolls back indexed data.
 - **Configurable Database Backend**: Uses SQLite with connection pooling, PRAGMA tuning, and schema migrations.
 - **Batch & Chunked Downloading**: Efficiently downloads logs in configurable block ranges.
+- **REST API**: Optional HTTP API for querying indexed events with pagination, filtering, CORS support, and comprehensive stats.
 - **Prometheus Metrics**: Built-in metrics for monitoring indexing performance, RPC health, database operations, and system resources.
 - **Comprehensive Test Suite**: Includes unit and integration tests for all major components.
 - **Example Indexers**: Production-grade ERC20 token indexer included as a template.
@@ -673,6 +674,187 @@ logging:
 - **info**: Normal operational messages. Good default for production.
 - **warn**: Unexpected conditions that don't prevent operation. Alerts for potential issues.
 - **error**: Errors that require attention but may allow continued operation.
+
+## 🌐 REST API Configuration
+
+ChainIndexor includes an optional HTTP REST API for querying indexed events in real-time. The API provides endpoints for listing indexers, querying events with pagination and filtering, and retrieving indexer statistics.
+
+### API Parameters
+
+| Parameter | Type | Required | Default | Description |
+| ----------- | ------ | ---------- | --------- | ------------- |
+| `enabled` | bool | No | false | Enable the REST API HTTP server |
+| `listen_address` | string | No | ":8080" | Address and port for the API HTTP server |
+| `read_timeout` | string | No | "15s" | Maximum duration for reading the entire request |
+| `write_timeout` | string | No | "15s" | Maximum duration before timing out writes of the response |
+| `idle_timeout` | string | No | "60s" | Maximum amount of time to wait for the next request |
+| `cors` | object | No | - | Optional CORS configuration for cross-origin requests |
+
+#### CORS Configuration
+
+| Parameter | Type | Required | Default | Description |
+| ----------- | ------ | ---------- | --------- | ------------- |
+| `allowed_origins` | []string | No | ["*"] | List of allowed origins. Use `["*"]` to allow all origins |
+| `allowed_methods` | []string | No | ["GET", "POST", "OPTIONS"] | HTTP methods allowed for CORS requests |
+| `allowed_headers` | []string | No | ["*"] | HTTP headers allowed in CORS requests |
+| `allow_credentials` | bool | No | false | Whether to allow credentials (cookies, authorization headers) |
+| `max_age` | int | No | 3600 | How long (in seconds) the results of a preflight request can be cached |
+
+#### Basic API Configuration
+
+```yaml
+api:
+  enabled: true
+  listen_address: ":8080"
+```
+
+#### Full API Configuration with CORS
+
+```yaml
+api:
+  enabled: true
+  listen_address: ":8080"
+  read_timeout: "30s"
+  write_timeout: "30s"
+  idle_timeout: "120s"
+  cors:
+    allowed_origins:
+      - "https://mydapp.com"
+      - "http://localhost:3000"
+    allowed_methods:
+      - "GET"
+      - "POST"
+      - "OPTIONS"
+    allowed_headers:
+      - "Content-Type"
+      - "Authorization"
+    allow_credentials: true
+    max_age: 7200
+```
+
+#### Production CORS Configuration (Specific Origins)
+
+```yaml
+api:
+  enabled: true
+  listen_address: ":8080"
+  cors:
+    allowed_origins:
+      - "https://app.example.com"
+      - "https://dashboard.example.com"
+    allowed_methods: ["GET", "OPTIONS"]
+    allow_credentials: true
+```
+
+#### Development CORS Configuration (Permissive)
+
+```yaml
+api:
+  enabled: true
+  listen_address: ":8080"
+  cors:
+    allowed_origins: ["*"]
+    allowed_methods: ["GET", "POST", "OPTIONS"]
+    allowed_headers: ["*"]
+```
+
+### API Endpoints
+
+Once enabled, the following endpoints are available:
+
+#### Health Check
+
+```bash
+GET /health
+```
+
+Returns server health status and uptime.
+
+#### List All Indexers
+
+```bash
+GET /api/v1/indexers
+```
+
+Returns a list of all registered indexers with their names.
+
+#### Query Events
+
+```bash
+GET /api/v1/indexers/{name}/events
+```
+
+Query parameters:
+
+- `limit` (int, default: 100, max: 1000): Number of events to return
+- `offset` (int, default: 0): Offset for pagination
+- `from_block` (uint64, optional): Filter events from this block number
+- `to_block` (uint64, optional): Filter events up to this block number
+- `address` (string, optional): Filter by contract address (lowercase hex with 0x prefix)
+- `event_type` (string, optional): Filter by event type (e.g., "Transfer", "Approval")
+
+Example:
+
+```bash
+# Get latest 50 Transfer events
+curl "http://localhost:8080/api/v1/indexers/erc20/events?event_type=Transfer&limit=50"
+
+# Get events for specific address with pagination
+curl "http://localhost:8080/api/v1/indexers/erc20/events?address=0x123...&limit=100&offset=100"
+
+# Get events in block range
+curl "http://localhost:8080/api/v1/indexers/erc20/events?from_block=1000000&to_block=1001000"
+```
+
+#### Get Indexer Statistics
+
+```bash
+GET /api/v1/indexers/{name}/stats
+```
+
+Returns statistics including:
+
+- Total events indexed
+- Latest block processed
+- Event counts by type
+- Last update timestamp
+
+Example:
+
+```bash
+curl "http://localhost:8080/api/v1/indexers/erc20/stats"
+```
+
+### Response Format
+
+All API responses use JSON format:
+
+```json
+{
+  "data": { ... },
+  "error": null
+}
+```
+
+Error responses:
+
+```json
+{
+  "data": null,
+  "error": "descriptive error message"
+}
+```
+
+### Enabling API Support in Generated Indexers
+
+To enable REST API support for a generated indexer, implement the `Queryable` interface. See the [Code Generator Documentation](./internal/codegen/README.md#api-integration-optional) for details.
+
+### API Security Considerations
+
+- **Authentication**: The API currently does not include authentication. Deploy behind a reverse proxy (nginx, Caddy) with authentication if needed.
+- **Rate Limiting**: No built-in rate limiting. Use a reverse proxy or API gateway for rate limiting in production.
+- **CORS**: Configure `allowed_origins` restrictively in production to prevent unauthorized cross-origin access.
+- **Timeouts**: Adjust timeout values based on your query complexity and expected response times.
 
 ## 📦 Installation
 
