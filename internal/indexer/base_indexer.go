@@ -280,8 +280,8 @@ func (b *BaseIndexer) QueryEventsTimeseries(
 	// Fetch headers for sample blocks only
 	rpcClient := RPCClientFromContext(ctx)
 	if rpcClient == nil {
-		return nil, fmt.Errorf("RPC client not available in context: ensure the API/indexer server was initialized with an RPC client " +
-			"and that the request context is populated via RPCClientFromContext")
+		return nil, fmt.Errorf("RPC client not available in context: ensure the API/indexer server was initialized " +
+			"with an RPC client and that the request context is populated via RPCClientFromContext")
 	}
 
 	headers, err := rpcClient.BatchGetBlockHeaders(ctx, sampleBlocks)
