@@ -17,6 +17,7 @@ import (
 	_ "github.com/goran-ethernal/ChainIndexor/examples/indexers/erc20"
 	commonpkg "github.com/goran-ethernal/ChainIndexor/internal/common"
 	"github.com/goran-ethernal/ChainIndexor/internal/logger"
+	"github.com/goran-ethernal/ChainIndexor/internal/rpc"
 	"github.com/goran-ethernal/ChainIndexor/pkg/api"
 	"github.com/goran-ethernal/ChainIndexor/pkg/config"
 	"github.com/goran-ethernal/ChainIndexor/pkg/indexer"
@@ -133,7 +134,10 @@ func TestAPI_IntegrationWithERC20(t *testing.T) {
 			AllowedOrigins: []string{"*"},
 		},
 	}
-	apiServer := api.NewServer(apiConfig, coordinator, log)
+	rpcClient, err := rpc.NewClient(ctx, anvil.URL, nil)
+	require.NoError(t, err)
+
+	apiServer := api.NewServer(apiConfig, coordinator, rpcClient, log)
 	go func() {
 		if err := apiServer.Start(ctx); err != nil {
 			t.Logf("API server error: %v", err)

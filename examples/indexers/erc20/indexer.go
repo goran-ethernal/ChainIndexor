@@ -10,20 +10,22 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/goran-ethernal/ChainIndexor/internal/db"
 	"github.com/goran-ethernal/ChainIndexor/internal/logger"
+	"github.com/goran-ethernal/ChainIndexor/internal/indexer"
 	"github.com/goran-ethernal/ChainIndexor/pkg/config"
-	"github.com/goran-ethernal/ChainIndexor/pkg/indexer"
+	pkgindexer "github.com/goran-ethernal/ChainIndexor/pkg/indexer"
 	"github.com/russross/meddler"
 	"github.com/goran-ethernal/ChainIndexor/examples/indexers/erc20/migrations"
 )
 
-// Compile-time check to ensure ERC20Indexer implements indexer.Indexer interface.
-var _ indexer.Indexer = (*ERC20Indexer)(nil)
+// Compile-time check to ensure ERC20Indexer implements pkgindexer.Indexer interface.
+var _ pkgindexer.Indexer = (*ERC20Indexer)(nil)
 
 // ERC20Indexer indexes ERC20 events.
 type ERC20Indexer struct {
+	*indexer.BaseIndexer
 	cfg config.IndexerConfig
-	db  *sql.DB
 	log *logger.Logger
 
 	// Map of contract addresses to event topic hashes
@@ -42,7 +44,7 @@ func NewERC20Indexer(cfg config.IndexerConfig, log *logger.Logger) (*ERC20Indexe
 	}
 
 	// Create database connection from config
-	database, err := sql.Open("sqlite3", cfg.DB.Path)
+	database, err := db.NewSQLiteDBFromConfig(cfg.DB)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create database: %w", err)
 	}
@@ -68,8 +70,8 @@ func NewERC20Indexer(cfg config.IndexerConfig, log *logger.Logger) (*ERC20Indexe
 	}
 
 	return &ERC20Indexer{
+		BaseIndexer:   indexer.NewBaseIndexer(database, log, cfg),
 		cfg:           cfg,
-		db:            database,
 		log:           log,
 		eventsToIndex: eventsToIndex,
 		transferTopic: transferTopic,
@@ -84,12 +86,27 @@ func (idx *ERC20Indexer) GetType() string {
 
 // GetName returns the configured name of the indexer instance.
 func (idx *ERC20Indexer) GetName() string {
-	return idx.cfg.Name
+	return idx.BaseIndexer.GetName()
 }
 
 // EventsToIndex returns the map of contract addresses to event topic hashes.
 func (idx *ERC20Indexer) EventsToIndex() map[common.Address]map[common.Hash]struct{} {
 	return idx.eventsToIndex
+}
+
+// StartBlock returns the block number from which this indexer should start.
+func (idx *ERC20Indexer) StartBlock() uint64 {
+	return idx.BaseIndexer.StartBlock()
+}
+
+// Close closes the database connection.
+func (idx *ERC20Indexer) Close() error {
+	return idx.BaseIndexer.Close()
+}
+
+// HandleReorg handles a blockchain reorganization by removing data from the reorg point.
+func (idx *ERC20Indexer) HandleReorg(blockNum uint64) error {
+	return idx.BaseIndexer.HandleReorg(idx, blockNum)
 }
 
 // HandleLogs processes a batch of logs and stores events.
@@ -98,7 +115,7 @@ func (idx *ERC20Indexer) HandleLogs(logs []types.Log) error {
 		return nil
 	}
 
-	tx, err := idx.db.Begin()
+	tx, err := idx.DB.Begin()
 	if err != nil {
 		return fmt.Errorf("failed to begin transaction: %w", err)
 	}
@@ -154,62 +171,6 @@ func (idx *ERC20Indexer) HandleLogs(logs []types.Log) error {
 	idx.log.Infof("Indexed %d transfers, %d approvals", transferCount, approvalCount)
 
 	return nil
-}
-
-// HandleReorg handles a blockchain reorganization by removing data from the reorg point.
-func (idx *ERC20Indexer) HandleReorg(blockNum uint64) error {
-	tx, err := idx.db.Begin()
-	if err != nil {
-		return fmt.Errorf("failed to begin transaction: %w", err)
-	}
-	defer func() {
-		if err := tx.Rollback(); err != nil && !errors.Is(err, sql.ErrTxDone) {
-			idx.log.Errorf("failed to rollback transaction: %v", err)
-		}
-	}()
-
-	
-	// Delete transfers from the reorg point
-	deleteTransfersQuery := `DELETE FROM transfers WHERE block_number >= ?`
-	result, err := tx.Exec(deleteTransfersQuery, blockNum)
-	if err != nil {
-		return fmt.Errorf("failed to delete transfers: %w", err)
-	}
-	transfersDeleted, err := result.RowsAffected()
-	if err != nil {
-		return fmt.Errorf("failed to get rows affected for transfers: %w", err)
-	}
-	
-	// Delete approvals from the reorg point
-	deleteApprovalsQuery := `DELETE FROM approvals WHERE block_number >= ?`
-	result, err = tx.Exec(deleteApprovalsQuery, blockNum)
-	if err != nil {
-		return fmt.Errorf("failed to delete approvals: %w", err)
-	}
-	approvalsDeleted, err := result.RowsAffected()
-	if err != nil {
-		return fmt.Errorf("failed to get rows affected for approvals: %w", err)
-	}
-	
-
-	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("failed to commit transaction: %w", err)
-	}
-
-	idx.log.Infof("Handled reorg from block %d: deleted %d transfers, %d approvals",
-		blockNum, transfersDeleted, approvalsDeleted)
-
-	return nil
-}
-
-// StartBlock returns the block number from which this indexer should start.
-func (idx *ERC20Indexer) StartBlock() uint64 {
-	return idx.cfg.StartBlock
-}
-
-// Close closes the database connection.
-func (idx *ERC20Indexer) Close() error {
-	return idx.db.Close()
 }
 
 

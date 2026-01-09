@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -11,7 +12,11 @@ import (
 
 	"github.com/goran-ethernal/ChainIndexor/internal/logger"
 	"github.com/goran-ethernal/ChainIndexor/pkg/indexer"
+	"github.com/goran-ethernal/ChainIndexor/pkg/rpc"
 )
+
+// RPCClientContextKey is the context key for storing RPC client (exported for use in generated code)
+type RPCClientContextKey struct{}
 
 // IndexerRegistry defines the interface for accessing registered indexers.
 type IndexerRegistry interface {
@@ -23,13 +28,15 @@ type IndexerRegistry interface {
 type Handler struct {
 	registry IndexerRegistry
 	log      *logger.Logger
+	rpc      rpc.EthClient
 }
 
 // NewHandler creates a new API handler.
-func NewHandler(registry IndexerRegistry, log *logger.Logger) *Handler {
+func NewHandler(registry IndexerRegistry, rpcClient rpc.EthClient, log *logger.Logger) *Handler {
 	return &Handler{
 		registry: registry,
 		log:      log,
+		rpc:      rpcClient,
 	}
 }
 
@@ -148,6 +155,82 @@ func (h *Handler) GetStats(w http.ResponseWriter, r *http.Request) {
 	respondJSON(w, http.StatusOK, stats)
 }
 
+// GetEventsTimeseries retrieves time-series aggregated event data.
+func (h *Handler) GetEventsTimeseries(w http.ResponseWriter, r *http.Request) {
+	indexerName := r.PathValue("name")
+	if indexerName == "" {
+		respondError(w, http.StatusBadRequest, "indexer name is required")
+		return
+	}
+
+	// Get indexer from registry
+	idx := h.registry.GetByName(indexerName)
+	if idx == nil {
+		respondError(w, http.StatusNotFound, fmt.Sprintf("indexer '%s' not found", indexerName))
+		return
+	}
+
+	// Check if indexer is queryable
+	queryable, ok := idx.(indexer.Queryable)
+	if !ok {
+		respondError(w, http.StatusBadRequest, fmt.Sprintf("indexer '%s' does not support querying", indexerName))
+		return
+	}
+
+	// Parse timeseries parameters
+	params, err := parseTimeseriesParams(r)
+	if err != nil {
+		respondError(w, http.StatusBadRequest, fmt.Sprintf("invalid query parameters: %v", err))
+		return
+	}
+
+	// Add RPC client to context so generated code can access it
+	ctx := context.WithValue(r.Context(), RPCClientContextKey{}, h.rpc)
+
+	// Query timeseries data
+	data, err := queryable.QueryEventsTimeseries(ctx, *params)
+	if err != nil {
+		h.log.Errorf("Failed to query events timeseries: %v", err)
+		respondError(w, http.StatusInternalServerError, "failed to query events timeseries")
+		return
+	}
+
+	respondJSON(w, http.StatusOK, data)
+}
+
+// GetMetrics retrieves performance and processing metrics.
+func (h *Handler) GetMetrics(w http.ResponseWriter, r *http.Request) {
+	indexerName := r.PathValue("name")
+	if indexerName == "" {
+		respondError(w, http.StatusBadRequest, "indexer name is required")
+		return
+	}
+
+	// Get indexer from registry
+	idx := h.registry.GetByName(indexerName)
+	if idx == nil {
+		respondError(w, http.StatusNotFound, fmt.Sprintf("indexer '%s' not found", indexerName))
+		return
+	}
+
+	// Check if indexer is queryable
+	queryable, ok := idx.(indexer.Queryable)
+	if !ok {
+		respondError(w, http.StatusBadRequest, fmt.Sprintf("indexer '%s' does not support querying", indexerName))
+		return
+	}
+
+	// Get metrics
+	metrics, err := queryable.GetMetrics(r.Context())
+	if err != nil {
+		h.log.Errorf("Failed to get metrics: %v", err)
+		respondError(w, http.StatusInternalServerError, "failed to get metrics")
+		return
+	}
+
+	respondJSON(w, http.StatusOK, metrics)
+}
+
 // Health returns the health status of the API and all indexers.
 func (h *Handler) Health(w http.ResponseWriter, r *http.Request) {
 	indexers := h.registry.ListAll()
@@ -240,6 +323,43 @@ func parseQueryParams(r *http.Request) (*indexer.QueryParams, error) {
 			return params, fmt.Errorf("invalid sort_order: must be 'asc' or 'desc'")
 		}
 		params.SortOrder = sortOrder
+	}
+
+	return params, nil
+}
+
+// parseTimeseriesParams parses HTTP query parameters for timeseries queries.
+func parseTimeseriesParams(r *http.Request) (*indexer.TimeseriesParams, error) {
+	params := &indexer.TimeseriesParams{
+		Interval: "day", // default
+	}
+
+	if interval := r.URL.Query().Get("interval"); interval != "" {
+		interval = strings.ToLower(interval)
+		if interval != "hour" && interval != "day" && interval != "week" {
+			return params, fmt.Errorf("invalid interval: must be 'hour', 'day', or 'week'")
+		}
+		params.Interval = interval
+	}
+
+	if fromBlockStr := r.URL.Query().Get("from_block"); fromBlockStr != "" {
+		fromBlock, err := strconv.ParseUint(fromBlockStr, 10, 64)
+		if err != nil {
+			return params, fmt.Errorf("invalid from_block")
+		}
+		params.FromBlock = &fromBlock
+	}
+
+	if toBlockStr := r.URL.Query().Get("to_block"); toBlockStr != "" {
+		toBlock, err := strconv.ParseUint(toBlockStr, 10, 64)
+		if err != nil {
+			return params, fmt.Errorf("invalid to_block")
+		}
+		params.ToBlock = &toBlock
+	}
+
+	if eventType := r.URL.Query().Get("event_type"); eventType != "" {
+		params.EventType = eventType
 	}
 
 	return params, nil

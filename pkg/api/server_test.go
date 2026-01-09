@@ -8,6 +8,7 @@ import (
 	apimocks "github.com/goran-ethernal/ChainIndexor/internal/api/mocks"
 	"github.com/goran-ethernal/ChainIndexor/internal/common"
 	"github.com/goran-ethernal/ChainIndexor/internal/logger"
+	rpcmocks "github.com/goran-ethernal/ChainIndexor/internal/rpc/mocks"
 	"github.com/goran-ethernal/ChainIndexor/pkg/config"
 	"github.com/goran-ethernal/ChainIndexor/pkg/indexer"
 	indexermocks "github.com/goran-ethernal/ChainIndexor/pkg/indexer/mocks"
@@ -100,7 +101,7 @@ func TestNewServer(t *testing.T) {
 			registry := apimocks.NewIndexerRegistry(t)
 			log := logger.NewNopLogger()
 
-			server := NewServer(tt.config, registry, log)
+			server := NewServer(tt.config, registry, rpcmocks.NewEthClient(t), log)
 
 			tt.validate(t, server)
 		})
@@ -121,7 +122,7 @@ func TestServer_Start_Disabled(t *testing.T) {
 	registry := apimocks.NewIndexerRegistry(t)
 	log := logger.NewNopLogger()
 
-	server := NewServer(cfg, registry, log)
+	server := NewServer(cfg, registry, rpcmocks.NewEthClient(t), log)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -162,7 +163,7 @@ func TestServer_Start_GracefulShutdown(t *testing.T) {
 	registry.EXPECT().ListAll().Return(([]indexer.Indexer)(nil)).Maybe()
 
 	log := logger.NewNopLogger()
-	server := NewServer(cfg, registry, log)
+	server := NewServer(cfg, registry, rpcmocks.NewEthClient(t), log)
 
 	ctx, cancel := context.WithCancel(context.Background())
 
@@ -257,7 +258,7 @@ func TestServer_Middleware(t *testing.T) {
 			registry := apimocks.NewIndexerRegistry(t)
 			log := logger.NewNopLogger()
 
-			server := NewServer(cfg, registry, log)
+			server := NewServer(cfg, registry, rpcmocks.NewEthClient(t), log)
 
 			tt.validate(t, server)
 		})
@@ -311,7 +312,7 @@ func TestServer_Timeouts(t *testing.T) {
 			registry := apimocks.NewIndexerRegistry(t)
 			log := logger.NewNopLogger()
 
-			server := NewServer(cfg, registry, log)
+			server := NewServer(cfg, registry, rpcmocks.NewEthClient(t), log)
 
 			require.Equal(t, tt.readTimeout, server.server.ReadTimeout)
 			require.Equal(t, tt.writeTimeout, server.server.WriteTimeout)
@@ -348,7 +349,7 @@ func TestServer_Integration_WithRealIndexer(t *testing.T) {
 	registry.EXPECT().ListAll().Return(([]indexer.Indexer)(nil)).Maybe()
 
 	log := logger.NewNopLogger()
-	server := NewServer(cfg, registry, log)
+	server := NewServer(cfg, registry, rpcmocks.NewEthClient(t), log)
 
 	// Verify server is properly configured
 	require.NotNil(t, server)
@@ -400,7 +401,7 @@ func TestServer_ListenAddress(t *testing.T) {
 			registry := apimocks.NewIndexerRegistry(t)
 			log := logger.NewNopLogger()
 
-			server := NewServer(cfg, registry, log)
+			server := NewServer(cfg, registry, rpcmocks.NewEthClient(t), log)
 
 			require.Equal(t, tt.address, server.server.Addr)
 			require.Equal(t, tt.address, server.config.ListenAddress)

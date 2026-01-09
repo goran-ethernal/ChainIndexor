@@ -8,6 +8,7 @@ import (
 	"sync"
 
 	"github.com/ethereum/go-ethereum/common"
+	ethtypes "github.com/ethereum/go-ethereum/core/types"
 	internalcommon "github.com/goran-ethernal/ChainIndexor/internal/common"
 	"github.com/goran-ethernal/ChainIndexor/internal/db"
 	"github.com/goran-ethernal/ChainIndexor/internal/fetcher"
@@ -300,7 +301,7 @@ func (d *Downloader) Download(ctx context.Context, cfg config.Config) error {
 
 			metrics.LogsIndexedInc(internalcommon.ComponentDownloader, len(result.Logs))
 
-			if err := d.coordinator.HandleLogs(result.Logs, result.FromBlock, result.ToBlock); err != nil {
+			if err := d.coordinator.HandleLogs(enrichLogsWithBlockTimestamps(result), result.FromBlock, result.ToBlock); err != nil {
 				return fmt.Errorf("failed to handle logs: %w", err)
 			}
 		}
@@ -413,4 +414,25 @@ func (d *Downloader) indexOfAddressLocked(addr common.Address) int {
 		}
 	}
 	return -1
+}
+
+func enrichLogsWithBlockTimestamps(result *fch.FetchResult) []ethtypes.Log {
+	if len(result.Headers) == 0 {
+		return result.Logs
+	}
+
+	blockTimestamps := make(map[uint64]uint64)
+	for _, header := range result.Headers {
+		blockTimestamps[header.Number.Uint64()] = header.Time
+	}
+
+	logs := make([]ethtypes.Log, len(result.Logs))
+	for i := range result.Logs {
+		logs[i] = result.Logs[i]
+		if timestamp, exists := blockTimestamps[logs[i].BlockNumber]; exists {
+			logs[i].BlockTimestamp = timestamp
+		}
+	}
+
+	return logs
 }

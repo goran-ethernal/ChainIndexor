@@ -49,6 +49,14 @@ type Queryable interface {
 
 	// GetEventTypes returns the list of event type names this indexer handles.
 	GetEventTypes() []string
+
+	// QueryEventsTimeseries retrieves time-series aggregated event data.
+	// Returns aggregated data points with timestamps and counts.
+	QueryEventsTimeseries(ctx context.Context, params TimeseriesParams) (interface{}, error)
+
+	// GetMetrics returns performance and processing metrics.
+	// Returns current processing state and performance indicators.
+	GetMetrics(ctx context.Context) (interface{}, error)
 }
 
 // QueryParams represents common query parameters for event retrieval.
@@ -78,4 +86,17 @@ func NewDefaultQueryParams() *QueryParams {
 		Offset:    0,
 		SortOrder: "desc",
 	}
+}
+
+// TimeseriesParams represents parameters for time-series queries.
+type TimeseriesParams struct {
+	// Interval for aggregation: "hour", "day", "week"
+	Interval string
+
+	// Block range filtering
+	FromBlock *uint64
+	ToBlock   *uint64
+
+	// Event type filtering
+	EventType string
 }

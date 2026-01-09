@@ -69,6 +69,64 @@ func (_c *Queryable_GetEventTypes_Call) RunAndReturn(run func() []string) *Query
 	return _c
 }
 
+// GetMetrics provides a mock function with given fields: ctx
+func (_m *Queryable) GetMetrics(ctx context.Context) (interface{}, error) {
+	ret := _m.Called(ctx)
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetMetrics")
+	}
+
+	var r0 interface{}
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context) (interface{}, error)); ok {
+		return rf(ctx)
+	}
+	if rf, ok := ret.Get(0).(func(context.Context) interface{}); ok {
+		r0 = rf(ctx)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(interface{})
+		}
+	}
+
+	if rf, ok := ret.Get(1).(func(context.Context) error); ok {
+		r1 = rf(ctx)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// Queryable_GetMetrics_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetMetrics'
+type Queryable_GetMetrics_Call struct {
+	*mock.Call
+}
+
+// GetMetrics is a helper method to define mock.On call
+//   - ctx context.Context
+func (_e *Queryable_Expecter) GetMetrics(ctx interface{}) *Queryable_GetMetrics_Call {
+	return &Queryable_GetMetrics_Call{Call: _e.mock.On("GetMetrics", ctx)}
+}
+
+func (_c *Queryable_GetMetrics_Call) Run(run func(ctx context.Context)) *Queryable_GetMetrics_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context))
+	})
+	return _c
+}
+
+func (_c *Queryable_GetMetrics_Call) Return(_a0 interface{}, _a1 error) *Queryable_GetMetrics_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *Queryable_GetMetrics_Call) RunAndReturn(run func(context.Context) (interface{}, error)) *Queryable_GetMetrics_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // GetStats provides a mock function with given fields: ctx
 func (_m *Queryable) GetStats(ctx context.Context) (interface{}, error) {
 	ret := _m.Called(ctx)
@@ -189,6 +247,65 @@ func (_c *Queryable_QueryEvents_Call) Return(_a0 interface{}, _a1 int, _a2 error
 }
 
 func (_c *Queryable_QueryEvents_Call) RunAndReturn(run func(context.Context, indexer.QueryParams) (interface{}, int, error)) *Queryable_QueryEvents_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// QueryEventsTimeseries provides a mock function with given fields: ctx, params
+func (_m *Queryable) QueryEventsTimeseries(ctx context.Context, params indexer.TimeseriesParams) (interface{}, error) {
+	ret := _m.Called(ctx, params)
+
+	if len(ret) == 0 {
+		panic("no return value specified for QueryEventsTimeseries")
+	}
+
+	var r0 interface{}
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context, indexer.TimeseriesParams) (interface{}, error)); ok {
+		return rf(ctx, params)
+	}
+	if rf, ok := ret.Get(0).(func(context.Context, indexer.TimeseriesParams) interface{}); ok {
+		r0 = rf(ctx, params)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(interface{})
+		}
+	}
+
+	if rf, ok := ret.Get(1).(func(context.Context, indexer.TimeseriesParams) error); ok {
+		r1 = rf(ctx, params)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// Queryable_QueryEventsTimeseries_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'QueryEventsTimeseries'
+type Queryable_QueryEventsTimeseries_Call struct {
+	*mock.Call
+}
+
+// QueryEventsTimeseries is a helper method to define mock.On call
+//   - ctx context.Context
+//   - params indexer.TimeseriesParams
+func (_e *Queryable_Expecter) QueryEventsTimeseries(ctx interface{}, params interface{}) *Queryable_QueryEventsTimeseries_Call {
+	return &Queryable_QueryEventsTimeseries_Call{Call: _e.mock.On("QueryEventsTimeseries", ctx, params)}
+}
+
+func (_c *Queryable_QueryEventsTimeseries_Call) Run(run func(ctx context.Context, params indexer.TimeseriesParams)) *Queryable_QueryEventsTimeseries_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context), args[1].(indexer.TimeseriesParams))
+	})
+	return _c
+}
+
+func (_c *Queryable_QueryEventsTimeseries_Call) Return(_a0 interface{}, _a1 error) *Queryable_QueryEventsTimeseries_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *Queryable_QueryEventsTimeseries_Call) RunAndReturn(run func(context.Context, indexer.TimeseriesParams) (interface{}, error)) *Queryable_QueryEventsTimeseries_Call {
 	_c.Call.Return(run)
 	return _c
 }

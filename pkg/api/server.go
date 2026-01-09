@@ -8,6 +8,7 @@ import (
 
 	"github.com/goran-ethernal/ChainIndexor/internal/logger"
 	"github.com/goran-ethernal/ChainIndexor/pkg/config"
+	"github.com/goran-ethernal/ChainIndexor/pkg/rpc"
 )
 
 const shutdownCtxTimeout = 10 * time.Second
@@ -19,11 +20,12 @@ type Server struct {
 	handler  *Handler
 	server   *http.Server
 	log      *logger.Logger
+	rpc      rpc.EthClient
 }
 
 // NewServer creates a new API server.
-func NewServer(cfg *config.APIConfig, registry IndexerRegistry, log *logger.Logger) *Server {
-	handler := NewHandler(registry, log)
+func NewServer(cfg *config.APIConfig, registry IndexerRegistry, rpcClient rpc.EthClient, log *logger.Logger) *Server {
+	handler := NewHandler(registry, rpcClient, log)
 
 	mux := http.NewServeMux()
 
@@ -34,6 +36,10 @@ func NewServer(cfg *config.APIConfig, registry IndexerRegistry, log *logger.Logg
 	// Event query endpoints - use indexer name for unique identification
 	mux.HandleFunc("GET /api/v1/indexers/{name}/events", handler.GetEvents)
 	mux.HandleFunc("GET /api/v1/indexers/{name}/stats", handler.GetStats)
+
+	// Analytics endpoints
+	mux.HandleFunc("GET /api/v1/indexers/{name}/events/timeseries", handler.GetEventsTimeseries)
+	mux.HandleFunc("GET /api/v1/indexers/{name}/metrics", handler.GetMetrics)
 
 	// Apply middleware
 	var h http.Handler = mux
@@ -59,6 +65,7 @@ func NewServer(cfg *config.APIConfig, registry IndexerRegistry, log *logger.Logg
 		handler:  handler,
 		server:   httpServer,
 		log:      log,
+		rpc:      rpcClient,
 	}
 }
 

@@ -10,20 +10,22 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/goran-ethernal/ChainIndexor/internal/db"
 	"github.com/goran-ethernal/ChainIndexor/internal/logger"
+	"github.com/goran-ethernal/ChainIndexor/internal/indexer"
 	"github.com/goran-ethernal/ChainIndexor/pkg/config"
-	"github.com/goran-ethernal/ChainIndexor/pkg/indexer"
+	pkgindexer "github.com/goran-ethernal/ChainIndexor/pkg/indexer"
 	"github.com/russross/meddler"
 	"{{.ImportPath}}/migrations"
 )
 
-// Compile-time check to ensure {{.Name}}Indexer implements indexer.Indexer interface.
-var _ indexer.Indexer = (*{{.Name}}Indexer)(nil)
+// Compile-time check to ensure {{.Name}}Indexer implements pkgindexer.Indexer interface.
+var _ pkgindexer.Indexer = (*{{.Name}}Indexer)(nil)
 
 // {{.Name}}Indexer indexes {{.Name}} events.
 type {{.Name}}Indexer struct {
+	*indexer.BaseIndexer
 	cfg config.IndexerConfig
-	db  *sql.DB
 	log *logger.Logger
 
 	// Map of contract addresses to event topic hashes
@@ -43,7 +45,7 @@ func New{{.Name}}Indexer(cfg config.IndexerConfig, log *logger.Logger) (*{{.Name
 	}
 
 	// Create database connection from config
-	database, err := sql.Open("sqlite3", cfg.DB.Path)
+	database, err := db.NewSQLiteDBFromConfig(cfg.DB)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create database: %w", err)
 	}
@@ -70,8 +72,8 @@ func New{{.Name}}Indexer(cfg config.IndexerConfig, log *logger.Logger) (*{{.Name
 	}
 
 	return &{{.Name}}Indexer{
+		BaseIndexer:   indexer.NewBaseIndexer(database, log, cfg),
 		cfg:           cfg,
-		db:            database,
 		log:           log,
 		eventsToIndex: eventsToIndex,
 		{{- range .Events}}
@@ -87,12 +89,27 @@ func (idx *{{.Name}}Indexer) GetType() string {
 
 // GetName returns the configured name of the indexer instance.
 func (idx *{{.Name}}Indexer) GetName() string {
-	return idx.cfg.Name
+	return idx.BaseIndexer.GetName()
 }
 
 // EventsToIndex returns the map of contract addresses to event topic hashes.
 func (idx *{{.Name}}Indexer) EventsToIndex() map[common.Address]map[common.Hash]struct{} {
 	return idx.eventsToIndex
+}
+
+// StartBlock returns the block number from which this indexer should start.
+func (idx *{{.Name}}Indexer) StartBlock() uint64 {
+	return idx.BaseIndexer.StartBlock()
+}
+
+// Close closes the database connection.
+func (idx *{{.Name}}Indexer) Close() error {
+	return idx.BaseIndexer.Close()
+}
+
+// HandleReorg handles a blockchain reorganization by removing data from the reorg point.
+func (idx *{{.Name}}Indexer) HandleReorg(blockNum uint64) error {
+	return idx.BaseIndexer.HandleReorg(idx, blockNum)
 }
 
 // HandleLogs processes a batch of logs and stores events.
@@ -101,7 +118,7 @@ func (idx *{{.Name}}Indexer) HandleLogs(logs []types.Log) error {
 		return nil
 	}
 
-	tx, err := idx.db.Begin()
+	tx, err := idx.DB.Begin()
 	if err != nil {
 		return fmt.Errorf("failed to begin transaction: %w", err)
 	}
@@ -147,51 +164,6 @@ func (idx *{{.Name}}Indexer) HandleLogs(logs []types.Log) error {
 	idx.log.Infof("Indexed {{range $i, $e := .Events}}{{if $i}}, {{end}}%d {{Pluralize (ToLowerCamelCase .Name)}}{{end}}"{{range .Events}}, {{ToLowerCamelCase .Name}}Count{{end}})
 
 	return nil
-}
-
-// HandleReorg handles a blockchain reorganization by removing data from the reorg point.
-func (idx *{{.Name}}Indexer) HandleReorg(blockNum uint64) error {
-	tx, err := idx.db.Begin()
-	if err != nil {
-		return fmt.Errorf("failed to begin transaction: %w", err)
-	}
-	defer func() {
-		if err := tx.Rollback(); err != nil && !errors.Is(err, sql.ErrTxDone) {
-			idx.log.Errorf("failed to rollback transaction: %v", err)
-		}
-	}()
-
-	{{range $i, $e := .Events}}
-	// Delete {{Pluralize (ToLowerCamelCase $e.Name)}} from the reorg point
-	delete{{$e.Name}}sQuery := {{"`"}}DELETE FROM {{TableName $e.Name}} WHERE block_number >= ?{{"`"}}
-	{{if eq $i 0}}result, err := {{else}}result, err = {{end}}tx.Exec(delete{{$e.Name}}sQuery, blockNum)
-	if err != nil {
-		return fmt.Errorf("failed to delete {{Pluralize (ToLowerCamelCase $e.Name)}}: %w", err)
-	}
-	{{Pluralize (ToLowerCamelCase $e.Name)}}Deleted, err := result.RowsAffected()
-	if err != nil {
-		return fmt.Errorf("failed to get rows affected for {{Pluralize (ToLowerCamelCase $e.Name)}}: %w", err)
-	}
-	{{end}}
-
-	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("failed to commit transaction: %w", err)
-	}
-
-	idx.log.Infof("Handled reorg from block %d: deleted {{range $i, $e := .Events}}{{if $i}}, {{end}}%d {{Pluralize (ToLowerCamelCase .Name)}}{{end}}",
-		blockNum{{range .Events}}, {{Pluralize (ToLowerCamelCase .Name)}}Deleted{{end}})
-
-	return nil
-}
-
-// StartBlock returns the block number from which this indexer should start.
-func (idx *{{.Name}}Indexer) StartBlock() uint64 {
-	return idx.cfg.StartBlock
-}
-
-// Close closes the database connection.
-func (idx *{{.Name}}Indexer) Close() error {
-	return idx.db.Close()
 }
 
 {{range .Events}}
