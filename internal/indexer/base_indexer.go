@@ -237,7 +237,8 @@ func (b *BaseIndexer) QueryEventsTimeseries(
 			GROUP BY (block_number / ?)
 			ORDER BY min_block ASC`, meta.Table, filterConditions)
 
-		args := []interface{}{meta.Name}
+		args := make([]interface{}, 0, len(filterArgs)+2) //nolint:mnd // +2 for event_type and blocksPerPeriod
+		args = append(args, meta.Name)
 		args = append(args, filterArgs...)
 		args = append(args, blocksPerPeriod)
 
