@@ -10,6 +10,7 @@ import (
 
 	apimocks "github.com/goran-ethernal/ChainIndexor/internal/api/mocks"
 	"github.com/goran-ethernal/ChainIndexor/internal/logger"
+	rpcmocks "github.com/goran-ethernal/ChainIndexor/internal/rpc/mocks"
 	"github.com/goran-ethernal/ChainIndexor/pkg/indexer"
 	indexermocks "github.com/goran-ethernal/ChainIndexor/pkg/indexer/mocks"
 	"github.com/stretchr/testify/mock"
@@ -463,7 +464,7 @@ func TestHandler_ListIndexers(t *testing.T) {
 			tt.setupMocks(registry)
 
 			log := logger.NewNopLogger()
-			handler := NewHandler(registry, log)
+			handler := NewHandler(registry, rpcmocks.NewEthClient(t), log)
 
 			req := httptest.NewRequest(http.MethodGet, "/api/v1/indexers", nil)
 			w := httptest.NewRecorder()
@@ -693,7 +694,7 @@ func TestHandler_GetEvents(t *testing.T) {
 			}
 
 			log := logger.NewNopLogger()
-			handler := NewHandler(registry, log)
+			handler := NewHandler(registry, rpcmocks.NewEthClient(t), log)
 
 			url := fmt.Sprintf("/api/v1/indexers/%s/events", tt.indexerName)
 			if tt.queryString != "" {
@@ -824,7 +825,7 @@ func TestHandler_GetStats(t *testing.T) {
 			}
 
 			log := logger.NewNopLogger()
-			handler := NewHandler(registry, log)
+			handler := NewHandler(registry, rpcmocks.NewEthClient(t), log)
 
 			url := fmt.Sprintf("/api/v1/indexers/%s/stats", tt.indexerName)
 			req := httptest.NewRequest(http.MethodGet, url, nil)
@@ -985,7 +986,7 @@ func TestHandler_Health(t *testing.T) {
 			tt.setupMocks(registry)
 
 			log := logger.NewNopLogger()
-			handler := NewHandler(registry, log)
+			handler := NewHandler(registry, rpcmocks.NewEthClient(t), log)
 
 			req := httptest.NewRequest(http.MethodGet, "/health", nil)
 			w := httptest.NewRecorder()

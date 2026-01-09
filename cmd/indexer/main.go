@@ -210,6 +210,7 @@ func runIndexer(cmd *cobra.Command, args []string) error {
 		apiServer := api.NewServer(
 			cfg.API,
 			dl.Coordinator(),
+			ethClient,
 			logger.NewComponentLoggerFromConfig(common.ComponentAPI, cfg.Logging),
 		)
 		go func() {
