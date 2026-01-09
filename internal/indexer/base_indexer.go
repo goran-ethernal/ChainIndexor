@@ -61,13 +61,18 @@ func (b *BaseIndexer) GetEventTypes(provider MetadataProvider) []string {
 }
 
 // QueryEvents retrieves events based on the provided query parameters.
-func (b *BaseIndexer) QueryEvents(ctx context.Context, provider MetadataProvider, qp indexer.QueryParams) (interface{}, int, error) {
+func (b *BaseIndexer) QueryEvents(
+	ctx context.Context,
+	provider MetadataProvider,
+	qp indexer.QueryParams,
+) (interface{}, int, error) {
 	meta, err := b.getEventMetadata(provider, qp.EventType)
 	if err != nil {
 		return nil, 0, err
 	}
 
 	// Build query
+	//nolint:gosec // Table name comes from trusted metadata, not user input
 	query := "SELECT * FROM " + meta.Table
 	args := []interface{}{}
 	var conditions []string
@@ -160,7 +165,8 @@ func (b *BaseIndexer) GetStats(ctx context.Context, provider MetadataProvider) (
 
 		var earliest, latest uint64
 		if err := b.DB.QueryRowContext(ctx,
-			"SELECT COALESCE(MIN(block_number), 0), COALESCE(MAX(block_number), 0) FROM "+meta.Table).Scan(&earliest, &latest); err != nil {
+			"SELECT COALESCE(MIN(block_number), 0), COALESCE(MAX(block_number), 0) FROM "+meta.Table).
+			Scan(&earliest, &latest); err != nil {
 			return nil, fmt.Errorf("failed to get %s block range: %w", meta.Name, err)
 		}
 
@@ -185,7 +191,11 @@ func (b *BaseIndexer) GetStats(ctx context.Context, provider MetadataProvider) (
 }
 
 // QueryEventsTimeseries retrieves time-series aggregated event data.
-func (b *BaseIndexer) QueryEventsTimeseries(ctx context.Context, provider MetadataProvider, tp indexer.TimeseriesParams) (interface{}, error) {
+func (b *BaseIndexer) QueryEventsTimeseries(
+	ctx context.Context,
+	provider MetadataProvider,
+	tp indexer.TimeseriesParams,
+) (interface{}, error) {
 	blocksPerPeriod := GetBlocksPerPeriod(tp.Interval)
 
 	// Build filter conditions
@@ -215,6 +225,7 @@ func (b *BaseIndexer) QueryEventsTimeseries(ctx context.Context, provider Metada
 			continue
 		}
 
+		//nolint:gosec // Table name comes from trusted metadata, not user input
 		query := fmt.Sprintf(`
 			SELECT 
 				MIN(block_number) as min_block,
@@ -297,7 +308,7 @@ func (b *BaseIndexer) QueryEventsTimeseries(ctx context.Context, provider Metada
 	})
 
 	for _, result := range periodResults {
-		midBlock := (result.MinBlock + result.MaxBlock) / 2
+		midBlock := (result.MinBlock + result.MaxBlock) / 2 //nolint:mnd
 		timestamp := InterpolateTimestamp(midBlock, calibrationPoints)
 		period := FormatPeriodForTimestamp(timestamp, tp.Interval)
 
@@ -316,7 +327,7 @@ func (b *BaseIndexer) QueryEventsTimeseries(ctx context.Context, provider Metada
 	}
 
 	// Convert to result format
-	var results []map[string]interface{}
+	results := make([]map[string]interface{}, 0, len(aggregatedData))
 	for key, data := range aggregatedData {
 		results = append(results, map[string]interface{}{
 			"period":     key.Period,
@@ -344,6 +355,7 @@ func (b *BaseIndexer) GetMetrics(ctx context.Context, provider MetadataProvider)
 		recentBlockCount  uint64
 	)
 
+	//nolint:gosec // Union query composed from trusted metadata tables
 	query := fmt.Sprintf(`
 		SELECT 
 			COUNT(*) as event_count,
@@ -365,7 +377,9 @@ func (b *BaseIndexer) GetMetrics(ctx context.Context, provider MetadataProvider)
 
 	// Calculate average events per day based on block range
 	var totalEvents int64
-	if err := b.DB.QueryRowContext(ctx, fmt.Sprintf("SELECT COUNT(*) FROM (%s) as all_events", unionQuery)).Scan(&totalEvents); err != nil {
+	if err := b.DB.QueryRowContext(ctx,
+		fmt.Sprintf("SELECT COUNT(*) FROM (%s) as all_events", unionQuery),
+	).Scan(&totalEvents); err != nil {
 		totalEvents = 0
 	}
 
@@ -436,6 +450,7 @@ func (b *BaseIndexer) HandleReorg(provider MetadataProvider, blockNum uint64) er
 
 	// Delete from each event table
 	for _, meta := range metadata {
+		//nolint:gosec // Table name comes from trusted metadata, not user input
 		query := fmt.Sprintf("DELETE FROM %s WHERE block_number >= ?", meta.Table)
 		_, err := tx.Exec(query, blockNum)
 		if err != nil {

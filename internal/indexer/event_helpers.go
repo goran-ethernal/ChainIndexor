@@ -11,6 +11,15 @@ import (
 	"github.com/goran-ethernal/ChainIndexor/pkg/rpc"
 )
 
+const (
+	// Approximate number of Ethereum blocks per week (12s block time)
+	BlocksPerWeek = 50400
+	// Approximate number of Ethereum blocks per day (12s block time)
+	BlocksPerDay = 7200
+	// Approximate number of Ethereum blocks per hour (12s block time)
+	BlocksPerHour = 300
+)
+
 // EventMetadata describes an event type for dynamic query handling.
 type EventMetadata struct {
 	Name           string       // Event name (e.g., "Transfer")
@@ -96,15 +105,12 @@ func InterpolateTimestamp(blockNum uint64, calibrationPoints []CalibrationPoint)
 
 // BuildUnionQuery builds a UNION query across all event tables.
 func BuildUnionQuery(metadata map[string]*EventMetadata, column string) string {
-	var parts []string
+	parts := make([]string, 0, len(metadata))
 	for _, meta := range metadata {
 		parts = append(parts, fmt.Sprintf("SELECT %s FROM %s", column, meta.Table))
 	}
 	return strings.Join(parts, " UNION ALL ")
 }
-
-// BlocksPerDay is the approximate number of Ethereum blocks per day (12s block time).
-const BlocksPerDay = 7200.0
 
 // TimeseriesPeriodData represents intermediate timeseries data from a query.
 type TimeseriesPeriodData struct {
@@ -124,11 +130,11 @@ type TimeseriesPeriodKey struct {
 func GetBlocksPerPeriod(interval string) uint64 {
 	switch interval {
 	case "hour":
-		return 300 // ~1 hour
+		return BlocksPerHour
 	case "week":
-		return 50400 // ~7 days
+		return BlocksPerWeek
 	default: // day
-		return 7200 // ~1 day
+		return BlocksPerDay
 	}
 }
 
