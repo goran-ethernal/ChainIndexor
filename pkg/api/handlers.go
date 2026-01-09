@@ -358,6 +358,10 @@ func parseTimeseriesParams(r *http.Request) (*indexer.TimeseriesParams, error) {
 		params.ToBlock = &toBlock
 	}
 
+	if params.FromBlock != nil && params.ToBlock != nil && *params.FromBlock > *params.ToBlock {
+		return params, fmt.Errorf("from_block cannot be greater than to_block")
+	}
+
 	if eventType := r.URL.Query().Get("event_type"); eventType != "" {
 		params.EventType = eventType
 	}

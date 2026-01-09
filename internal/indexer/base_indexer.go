@@ -246,15 +246,17 @@ func (b *BaseIndexer) QueryEventsTimeseries(
 		if err != nil {
 			return nil, fmt.Errorf("failed to query %s timeseries: %w", meta.Name, err)
 		}
-		defer rows.Close()
 
 		for rows.Next() {
 			var data TimeseriesPeriodData
 			if err := rows.Scan(&data.MinBlock, &data.MaxBlock, &data.EventType, &data.Count); err != nil {
+				rows.Close()
 				return nil, err
 			}
 			periodResults = append(periodResults, data)
 		}
+
+		rows.Close()
 	}
 
 	if len(periodResults) == 0 {
@@ -278,7 +280,8 @@ func (b *BaseIndexer) QueryEventsTimeseries(
 	// Fetch headers for sample blocks only
 	rpcClient := RPCClientFromContext(ctx)
 	if rpcClient == nil {
-		return nil, fmt.Errorf("RPC client not available in context")
+		return nil, fmt.Errorf("RPC client not available in context: ensure the API/indexer server was initialized with an RPC client " +
+			"and that the request context is populated via RPCClientFromContext")
 	}
 
 	headers, err := rpcClient.BatchGetBlockHeaders(ctx, sampleBlocks)
@@ -349,6 +352,10 @@ func (b *BaseIndexer) GetMetrics(ctx context.Context, provider MetadataProvider)
 	// Build UNION query for all event tables
 	metadata := provider.InitEventMetadata()
 	unionQuery := BuildUnionQuery(metadata, "block_number")
+	if strings.TrimSpace(unionQuery) == "" {
+		// No event metadata available; return empty metrics without executing invalid SQL.
+		return metrics, nil
+	}
 
 	// Calculate processing rate from recent blocks
 	var (
