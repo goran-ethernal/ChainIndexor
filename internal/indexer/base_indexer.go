@@ -346,7 +346,7 @@ func (b *BaseIndexer) QueryEventsTimeseries(
 
 	// Sort results by period (string comparison works for ISO 8601 format)
 	sort.Slice(results, func(i, j int) bool {
-		return results[i]["period"].(string) < results[j]["period"].(string)
+		return results[i]["period"].(string) < results[j]["period"].(string) //nolint:forcetypeassert
 	})
 
 	return results, nil
