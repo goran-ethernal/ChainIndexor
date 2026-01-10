@@ -39,12 +39,12 @@ func FormatPeriodForTimestamp(timestamp uint64, interval string) string {
 	t := time.Unix(int64(timestamp), 0).UTC()
 	switch interval {
 	case "hour":
-		return t.Format("01/02/2006 15:00:00")
+		return t.Format("2006-01-02 15:00:00")
 	case "week":
 		year, week := t.ISOWeek()
 		return fmt.Sprintf("%d-W%02d", year, week)
 	default: // day
-		return t.Format("01/02/2006")
+		return t.Format("2006-01-02")
 	}
 }
 
