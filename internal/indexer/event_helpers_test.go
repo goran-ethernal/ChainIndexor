@@ -20,13 +20,13 @@ func TestFormatPeriodForTimestamp(t *testing.T) {
 			name:      "FormatDay",
 			timestamp: 1705276800, // Jan 15, 2024 00:00:00 UTC
 			interval:  "day",
-			expected:  "01/15/2024",
+			expected:  "2024-01-15",
 		},
 		{
 			name:      "FormatHour",
 			timestamp: 1705276800, // Jan 15, 2024 00:00:00 UTC
 			interval:  "hour",
-			expected:  "01/15/2024 00:00:00",
+			expected:  "2024-01-15 00:00:00",
 		},
 		{
 			name:      "FormatWeek",
@@ -38,19 +38,19 @@ func TestFormatPeriodForTimestamp(t *testing.T) {
 			name:      "DefaultToDay",
 			timestamp: 1705276800,
 			interval:  "unknown",
-			expected:  "01/15/2024",
+			expected:  "2024-01-15",
 		},
 		{
 			name:      "FormatDayWithTime",
 			timestamp: 1705320000, // Jan 15, 2024 12:00:00 UTC
 			interval:  "day",
-			expected:  "01/15/2024",
+			expected:  "2024-01-15",
 		},
 		{
 			name:      "FormatHourWithDifferentTime",
 			timestamp: 1705320000, // Jan 15, 2024 12:00:00 UTC
 			interval:  "hour",
-			expected:  "01/15/2024 12:00:00",
+			expected:  "2024-01-15 12:00:00",
 		},
 	}
 
@@ -343,7 +343,7 @@ func TestFormatPeriodForTimestampEdgeCases(t *testing.T) {
 	t.Run("Epoch", func(t *testing.T) {
 		t.Parallel()
 		result := FormatPeriodForTimestamp(0, "day")
-		require.Equal(t, "01/01/1970", result)
+		require.Equal(t, "1970-01-01", result)
 	})
 
 	t.Run("LeapYear", func(t *testing.T) {
@@ -351,7 +351,7 @@ func TestFormatPeriodForTimestampEdgeCases(t *testing.T) {
 		// Feb 29, 2024 (leap year)
 		leapYearTimestamp := uint64(time.Date(2024, 2, 29, 0, 0, 0, 0, time.UTC).Unix())
 		result := FormatPeriodForTimestamp(leapYearTimestamp, "day")
-		require.Equal(t, "02/29/2024", result)
+		require.Equal(t, "2024-02-29", result)
 	})
 
 	t.Run("EndOfYear", func(t *testing.T) {
@@ -359,7 +359,7 @@ func TestFormatPeriodForTimestampEdgeCases(t *testing.T) {
 		// Dec 31, 2024
 		endOfYearTimestamp := uint64(time.Date(2024, 12, 31, 23, 59, 59, 0, time.UTC).Unix())
 		result := FormatPeriodForTimestamp(endOfYearTimestamp, "day")
-		require.Equal(t, "12/31/2024", result)
+		require.Equal(t, "2024-12-31", result)
 	})
 
 	t.Run("WeekBoundary", func(t *testing.T) {

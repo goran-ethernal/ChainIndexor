@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"sort"
 	"strings"
 
 	"github.com/goran-ethernal/ChainIndexor/internal/logger"
@@ -87,9 +88,10 @@ func (b *BaseIndexer) QueryEvents(
 	}
 	if qp.Address != "" && len(meta.AddressColumns) > 0 {
 		addrConditions := make([]string, len(meta.AddressColumns))
+		lowerAddress := strings.ToLower(qp.Address)
 		for i, col := range meta.AddressColumns {
-			addrConditions[i] = col + " = ?"
-			args = append(args, qp.Address)
+			addrConditions[i] = "LOWER(" + col + ") = ?"
+			args = append(args, lowerAddress)
 		}
 		conditions = append(conditions, "("+strings.Join(addrConditions, " OR ")+")")
 	}
@@ -341,6 +343,11 @@ func (b *BaseIndexer) QueryEventsTimeseries(
 			"max_block":  data.MaxBlock,
 		})
 	}
+
+	// Sort results by period (string comparison works for ISO 8601 format)
+	sort.Slice(results, func(i, j int) bool {
+		return results[i]["period"].(string) < results[j]["period"].(string) //nolint:forcetypeassert
+	})
 
 	return results, nil
 }
