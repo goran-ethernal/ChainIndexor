@@ -6,10 +6,16 @@ import (
 	"net/http"
 	"time"
 
+	httpSwagger "github.com/swaggo/http-swagger"
+
 	"github.com/goran-ethernal/ChainIndexor/internal/logger"
+	"github.com/goran-ethernal/ChainIndexor/pkg/api/docs"
 	"github.com/goran-ethernal/ChainIndexor/pkg/config"
 	"github.com/goran-ethernal/ChainIndexor/pkg/rpc"
 )
+
+// Ensure docs are initialized
+var _ = docs.SwaggerInfo
 
 const shutdownCtxTimeout = 10 * time.Second
 
@@ -40,6 +46,12 @@ func NewServer(cfg *config.APIConfig, registry IndexerRegistry, rpcClient rpc.Et
 	// Analytics endpoints
 	mux.HandleFunc("GET /api/v1/indexers/{name}/events/timeseries", handler.GetEventsTimeseries)
 	mux.HandleFunc("GET /api/v1/indexers/{name}/metrics", handler.GetMetrics)
+
+	// Swagger documentation endpoints
+	mux.Handle("GET /swagger/", httpSwagger.Handler(
+		httpSwagger.URL("http://localhost:8080/swagger/doc.json"),
+		httpSwagger.DeepLinking(true),
+	))
 
 	// Apply middleware
 	var h http.Handler = mux

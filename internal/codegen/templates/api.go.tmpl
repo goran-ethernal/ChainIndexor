@@ -36,7 +36,7 @@ func (idx *{{.Name}}Indexer) QueryEvents(ctx context.Context, params pkgindexer.
 }
 
 // GetStats returns statistics about the indexed data.
-func (idx *{{.Name}}Indexer) GetStats(ctx context.Context) (any, error) {
+func (idx *{{.Name}}Indexer) GetStats(ctx context.Context) (pkgindexer.StatsResponse, error) {
 	return idx.BaseIndexer.GetStats(ctx, idx)
 }
 
@@ -46,11 +46,11 @@ func (idx *{{.Name}}Indexer) GetEventTypes() []string {
 }
 
 // QueryEventsTimeseries retrieves time-series aggregated event data.
-func (idx *{{.Name}}Indexer) QueryEventsTimeseries(ctx context.Context, params pkgindexer.TimeseriesParams) (interface{}, error) {
+func (idx *{{.Name}}Indexer) QueryEventsTimeseries(ctx context.Context, params pkgindexer.TimeseriesParams) ([]pkgindexer.TimeseriesDataPoint, error) {
 	return idx.BaseIndexer.QueryEventsTimeseries(ctx, idx, params)
 }
 
 // GetMetrics returns performance and processing metrics.
-func (idx *{{.Name}}Indexer) GetMetrics(ctx context.Context) (interface{}, error) {
+func (idx *{{.Name}}Indexer) GetMetrics(ctx context.Context) (pkgindexer.MetricsResponse, error) {
 	return idx.BaseIndexer.GetMetrics(ctx, idx)
 }

@@ -151,9 +151,11 @@ The `Queryable` interface is defined in `pkg/indexer/indexer.go`:
 
 ```go
 type Queryable interface {
-    QueryEvents(ctx context.Context, params QueryParams) ([]EventData, error)
-    GetStats(ctx context.Context) (*Stats, error)
+    QueryEvents(ctx context.Context, params QueryParams) ([]EventData, int64, error)
+    GetStats(ctx context.Context) (*StatsResponse, error)
     GetEventTypes(ctx context.Context) ([]string, error)
+    QueryEventsTimeseries(ctx context.Context, params TimeseriesParams) ([]TimeseriesDataPoint, error)
+    GetMetrics(ctx context.Context) (*MetricsResponse, error)
 }
 
 type QueryParams struct {
@@ -165,21 +167,190 @@ type QueryParams struct {
     EventType *string
 }
 
-type EventData struct {
-    BlockNumber      uint64
-    TransactionHash  string
-    LogIndex         uint
-    Address          string
-    EventType        string
-    EventData        interface{}  // Your event struct
-    BlockTimestamp   int64
+type TimeseriesParams struct {
+    Interval  string    // "hour", "day", or "week"
+    EventType *string
+    FromBlock *uint64
+    ToBlock   *uint64
 }
 
-type Stats struct {
-    TotalEvents      int64
-    LatestBlock      uint64
-    EventCounts      map[string]int64
-    LastUpdated      time.Time
+type StatsResponse struct {
+    TotalEvents   int64             `json:"total_events"`
+    EventCounts   map[string]int64  `json:"event_counts"`
+    EarliestBlock uint64            `json:"earliest_block"`
+    LatestBlock   uint64            `json:"latest_block"`
+}
+
+type TimeseriesDataPoint struct {
+    Period    string `json:"period"`
+    EventType string `json:"event_type"`
+    Count     int64  `json:"count"`
+    MinBlock  uint64 `json:"min_block"`
+    MaxBlock  uint64 `json:"max_block"`
+}
+
+type MetricsResponse struct {
+    EventsPerBlock      float64 `json:"events_per_block"`
+    AvgEventsPerDay     float64 `json:"avg_events_per_day"`
+    RecentBlocksAnalyzed uint64 `json:"recent_blocks_analyzed"`
+    RecentEventsCount   int64   `json:"recent_events_count"`
+}
+```
+
+### Available API Endpoints
+
+Once you implement the `Queryable` interface and enable the API, the following endpoints become available:
+
+#### 1. Health Check
+
+```text
+GET /health
+```
+
+Check the health status of the API and all registered indexers.
+
+**Response:**
+
+```json
+{
+  "timestamp": "2024-01-15T10:30:00Z",
+  "status": "healthy",
+  "uptime": "1h30m45s",
+  "indexers": [
+    {
+      "name": "erc20",
+      "healthy": true,
+      "latest_block": 19234567,
+      "event_count": 1250000
+    }
+  ]
+}
+```
+
+#### 2. List Indexers
+
+```text
+GET /indexers
+```
+
+Returns all registered indexers with their event types and available endpoints.
+
+**Response:**
+
+```json
+[
+  {
+    "type": "erc20",
+    "name": "erc20",
+    "event_types": ["Transfer", "Approval"],
+    "endpoints": [
+      "/indexers/erc20/events",
+      "/indexers/erc20/stats"
+    ]
+  }
+]
+```
+
+#### 3. Query Events
+
+```text
+GET /indexers/{name}/events
+```
+
+Query events with filtering and pagination.
+
+**Query Parameters:**
+
+- `limit` (int, default: 100, max: 1000) - Events per page
+- `offset` (int, default: 0) - Pagination offset
+- `from_block` (uint64, optional) - Filter from block number
+- `to_block` (uint64, optional) - Filter to block number
+- `address` (string, optional) - Filter by address
+- `event_type` (string, optional) - Filter by event type
+- `sort_by` (string, optional) - Sort field
+- `sort_order` (string, optional) - "asc" or "desc"
+
+**Response:**
+
+```json
+{
+  "events": [...],
+  "pagination": {
+    "total": 50000,
+    "limit": 100,
+    "offset": 0,
+    "has_more": true
+  }
+}
+```
+
+#### 4. Get Stats
+
+```text
+GET /indexers/{name}/stats
+```
+
+Get indexer statistics.
+
+**Response:**
+
+```json
+{
+  "total_events": 1250000,
+  "event_counts": {
+    "Transfer": 1000000,
+    "Approval": 250000
+  },
+  "earliest_block": 12373391,
+  "latest_block": 19234567
+}
+```
+
+#### 5. Get Timeseries Data
+
+```text
+GET /indexers/{name}/events/timeseries
+```
+
+Get time-series aggregated event data for analytics and charting.
+
+**Query Parameters:**
+
+- `interval` (string, optional, default: "day") - "hour", "day", or "week"
+- `event_type` (string, optional) - Filter by event type
+- `from_block` (uint64, optional) - From block
+- `to_block` (uint64, optional) - To block
+
+**Response:**
+
+```json
+[
+  {
+    "period": "2024-01-15T00:00:00Z",
+    "event_type": "Transfer",
+    "count": 5000,
+    "min_block": 19230000,
+    "max_block": 19234567
+  }
+]
+```
+
+#### 6. Get Metrics
+
+```text
+GET /indexers/{name}/metrics
+```
+
+Get performance and processing metrics.
+
+**Response:**
+
+```json
+{
+  "events_per_block": 12.5,
+  "avg_events_per_day": 150000.25,
+  "recent_blocks_analyzed": 1000,
+  "recent_events_count": 12500
 }
 ```
 
@@ -192,7 +363,7 @@ Here's how to implement API support for a generated ERC20 indexer:
 Add a method to your indexer struct that queries events from your database:
 
 ```go
-func (idx *ERC20Indexer) QueryEvents(ctx context.Context, params indexer.QueryParams) ([]indexer.EventData, error) {
+func (idx *ERC20Indexer) QueryEvents(ctx context.Context, params indexer.QueryParams) ([]indexer.EventData, int64, error) {
     query := `
         SELECT block_number, transaction_hash, log_index, address, 
                event_type, event_data, block_timestamp
@@ -224,6 +395,14 @@ func (idx *ERC20Indexer) QueryEvents(ctx context.Context, params indexer.QueryPa
         argCount++
     }
 
+    // Get total count for pagination
+    countQuery := strings.Replace(query, "SELECT block_number, transaction_hash, log_index, address, event_type, event_data, block_timestamp", "SELECT COUNT(*)", 1)
+    row := idx.db.QueryRowContext(ctx, countQuery, args...)
+    var total int64
+    if err := row.Scan(&total); err != nil {
+        return nil, 0, fmt.Errorf("count events: %w", err)
+    }
+
     // Add ordering and pagination
     query += " ORDER BY block_number DESC, log_index DESC"
     query += fmt.Sprintf(" LIMIT $%d OFFSET $%d", argCount, argCount+1)
@@ -231,7 +410,7 @@ func (idx *ERC20Indexer) QueryEvents(ctx context.Context, params indexer.QueryPa
 
     rows, err := idx.db.QueryContext(ctx, query, args...)
     if err != nil {
-        return nil, fmt.Errorf("query events: %w", err)
+        return nil, 0, fmt.Errorf("query events: %w", err)
     }
     defer rows.Close()
 
@@ -250,7 +429,7 @@ func (idx *ERC20Indexer) QueryEvents(ctx context.Context, params indexer.QueryPa
             &evt.BlockTimestamp,
         )
         if err != nil {
-            return nil, fmt.Errorf("scan event: %w", err)
+            return nil, 0, fmt.Errorf("scan event: %w", err)
         }
 
         // Unmarshal event data based on event type
@@ -258,13 +437,13 @@ func (idx *ERC20Indexer) QueryEvents(ctx context.Context, params indexer.QueryPa
         case "Transfer":
             var transfer Transfer
             if err := json.Unmarshal(eventDataJSON, &transfer); err != nil {
-                return nil, fmt.Errorf("unmarshal Transfer: %w", err)
+                return nil, 0, fmt.Errorf("unmarshal Transfer: %w", err)
             }
             evt.EventData = transfer
         case "Approval":
             var approval Approval
             if err := json.Unmarshal(eventDataJSON, &approval); err != nil {
-                return nil, fmt.Errorf("unmarshal Approval: %w", err)
+                return nil, 0, fmt.Errorf("unmarshal Approval: %w", err)
             }
             evt.EventData = approval
         }
@@ -272,34 +451,27 @@ func (idx *ERC20Indexer) QueryEvents(ctx context.Context, params indexer.QueryPa
         results = append(results, evt)
     }
 
-    return results, rows.Err()
+    return results, total, rows.Err()
 }
 ```
 
 #### 2. Implement GetStats
 
-Add a method to return indexer statistics:
-
 ```go
-func (idx *ERC20Indexer) GetStats(ctx context.Context) (*indexer.Stats, error) {
-    stats := &indexer.Stats{
+func (idx *ERC20Indexer) GetStats(ctx context.Context) (*indexer.StatsResponse, error) {
+    stats := &indexer.StatsResponse{
         EventCounts: make(map[string]int64),
     }
 
     // Get total events and latest block
     row := idx.db.QueryRowContext(ctx, `
-        SELECT COUNT(*), MAX(block_number), MAX(block_timestamp)
+        SELECT COUNT(*), MIN(block_number), MAX(block_number)
         FROM events
     `)
     
-    var latestTimestamp sql.NullInt64
-    err := row.Scan(&stats.TotalEvents, &stats.LatestBlock, &latestTimestamp)
+    err := row.Scan(&stats.TotalEvents, &stats.EarliestBlock, &stats.LatestBlock)
     if err != nil {
         return nil, fmt.Errorf("get total stats: %w", err)
-    }
-    
-    if latestTimestamp.Valid {
-        stats.LastUpdated = time.Unix(latestTimestamp.Int64, 0)
     }
 
     // Get event counts by type
@@ -326,60 +498,39 @@ func (idx *ERC20Indexer) GetStats(ctx context.Context) (*indexer.Stats, error) {
 }
 ```
 
-#### 3. Implement GetEventTypes
+#### 3. Implement Other Interface Methods
 
-Add a method to return the list of event types:
+Implement `GetEventTypes()`, `QueryEventsTimeseries()`, and `GetMetrics()` similarly:
 
 ```go
 func (idx *ERC20Indexer) GetEventTypes(ctx context.Context) ([]string, error) {
-    rows, err := idx.db.QueryContext(ctx, `
-        SELECT DISTINCT event_type
-        FROM events
-        ORDER BY event_type
-    `)
-    if err != nil {
-        return nil, fmt.Errorf("query event types: %w", err)
-    }
-    defer rows.Close()
+    // Return list of event types
+}
 
-    var types []string
-    for rows.Next() {
-        var eventType string
-        if err := rows.Scan(&eventType); err != nil {
-            return nil, fmt.Errorf("scan event type: %w", err)
-        }
-        types = append(types, eventType)
-    }
+func (idx *ERC20Indexer) QueryEventsTimeseries(ctx context.Context, params indexer.TimeseriesParams) ([]indexer.TimeseriesDataPoint, error) {
+    // Return time-aggregated event data
+}
 
-    return types, rows.Err()
+func (idx *ERC20Indexer) GetMetrics(ctx context.Context) (*indexer.MetricsResponse, error) {
+    // Return performance metrics
 }
 ```
 
 ### Database Schema Requirements
 
-To support the Queryable interface efficiently, ensure your database schema includes:
+Ensure your database schema includes:
 
-1. An `events` table with these columns:
-   - `block_number` (uint64)
-   - `transaction_hash` (string)
-   - `log_index` (uint)
-   - `address` (string)
-   - `event_type` (string)
-   - `event_data` (JSON/TEXT)
-   - `block_timestamp` (int64)
-
-2. Indexes for query performance:
+1. An `events` table with proper indexing:
 
    ```sql
    CREATE INDEX idx_events_block_number ON events(block_number);
    CREATE INDEX idx_events_address ON events(address);
    CREATE INDEX idx_events_type ON events(event_type);
-   CREATE INDEX idx_events_timestamp ON events(block_timestamp);
    ```
 
 ### Enabling the API
 
-Once you've implemented the `Queryable` interface, enable the API in your configuration:
+Enable the API in your configuration:
 
 ```yaml
 api:
@@ -389,55 +540,12 @@ api:
     allowed_origins: ["*"]
 ```
 
-Then register your indexer with the factory and start the server:
+### Interactive API Documentation
 
-```go
-import (
-    "github.com/yourorg/chainindexor/pkg/api"
-    "github.com/yourorg/chainindexor/pkg/indexer"
-)
+For detailed API documentation with live testing capabilities, visit:
+**[http://localhost:8080/swagger/index.html](http://localhost:8080/swagger/index.html)**
 
-func main() {
-    // Register indexer factory
-    indexer.Register("erc20", func(config indexer.Config) (indexer.Indexer, error) {
-        return NewERC20Indexer(config)
-    })
-
-    // Create API server (will automatically discover queryable indexers)
-    apiServer := api.NewServer(apiConfig, indexerRegistry)
-    
-    // Start API server
-    go apiServer.Start()
-    defer apiServer.Shutdown(context.Background())
-    
-    // ... rest of your application
-}
-```
-
-### Testing API Integration
-
-Test your API implementation:
-
-```bash
-# List all indexers
-curl http://localhost:8080/api/v1/indexers
-
-# Query events
-curl "http://localhost:8080/api/v1/indexers/erc20/events?limit=10"
-
-# Query with filters
-curl "http://localhost:8080/api/v1/indexers/erc20/events?event_type=Transfer&from_block=1000000&limit=50"
-
-# Get statistics
-curl http://localhost:8080/api/v1/indexers/erc20/stats
-```
-
-### Notes
-
-- The `Queryable` interface is **optional**. If your indexer doesn't implement it, the API will simply not expose query endpoints for that indexer.
-- The API automatically detects which indexers implement `Queryable` through type assertion.
-- For production deployments, consider adding authentication and rate limiting via a reverse proxy.
-- See the [main README](../../README.md#-rest-api-configuration) for comprehensive API configuration options.
+See the [main README](../../README.md#-rest-api-configuration) for comprehensive API configuration options.
 
 ## Generated Code Structure
 

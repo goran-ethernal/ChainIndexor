@@ -147,8 +147,8 @@ func (b *BaseIndexer) QueryEvents(
 }
 
 // GetStats returns statistics about the indexed data.
-func (b *BaseIndexer) GetStats(ctx context.Context, provider MetadataProvider) (interface{}, error) {
-	stats := make(map[string]interface{})
+// GetStats returns statistics about the indexed data.
+func (b *BaseIndexer) GetStats(ctx context.Context, provider MetadataProvider) (indexer.StatsResponse, error) {
 	eventCounts := make(map[string]int64)
 	var totalEvents int64
 	var earliestBlock, latestBlock uint64
@@ -160,7 +160,7 @@ func (b *BaseIndexer) GetStats(ctx context.Context, provider MetadataProvider) (
 		var count int64
 		if err := b.DB.QueryRowContext(ctx,
 			"SELECT COUNT(*) FROM "+meta.Table).Scan(&count); err != nil {
-			return nil, fmt.Errorf("failed to get %s count: %w", meta.Name, err)
+			return indexer.StatsResponse{}, fmt.Errorf("failed to get %s count: %w", meta.Name, err)
 		}
 		eventCounts[meta.Name] = count
 		totalEvents += count
@@ -169,7 +169,7 @@ func (b *BaseIndexer) GetStats(ctx context.Context, provider MetadataProvider) (
 		if err := b.DB.QueryRowContext(ctx,
 			"SELECT COALESCE(MIN(block_number), 0), COALESCE(MAX(block_number), 0) FROM "+meta.Table).
 			Scan(&earliest, &latest); err != nil {
-			return nil, fmt.Errorf("failed to get %s block range: %w", meta.Name, err)
+			return indexer.StatsResponse{}, fmt.Errorf("failed to get %s block range: %w", meta.Name, err)
 		}
 
 		if earliest == 0 && latest == 0 {
@@ -184,12 +184,12 @@ func (b *BaseIndexer) GetStats(ctx context.Context, provider MetadataProvider) (
 		}
 	}
 
-	stats["total_events"] = totalEvents
-	stats["event_counts"] = eventCounts
-	stats["earliest_block"] = earliestBlock
-	stats["latest_block"] = latestBlock
-
-	return stats, nil
+	return indexer.StatsResponse{
+		TotalEvents:   totalEvents,
+		EventCounts:   eventCounts,
+		EarliestBlock: earliestBlock,
+		LatestBlock:   latestBlock,
+	}, nil
 }
 
 // QueryEventsTimeseries retrieves time-series aggregated event data.
@@ -197,7 +197,7 @@ func (b *BaseIndexer) QueryEventsTimeseries(
 	ctx context.Context,
 	provider MetadataProvider,
 	tp indexer.TimeseriesParams,
-) (interface{}, error) {
+) ([]indexer.TimeseriesDataPoint, error) {
 	blocksPerPeriod := GetBlocksPerPeriod(tp.Interval)
 
 	// Build filter conditions
@@ -262,7 +262,7 @@ func (b *BaseIndexer) QueryEventsTimeseries(
 	}
 
 	if len(periodResults) == 0 {
-		return []map[string]interface{}{}, nil
+		return []indexer.TimeseriesDataPoint{}, nil
 	}
 
 	// Find block range across all results
@@ -333,35 +333,33 @@ func (b *BaseIndexer) QueryEventsTimeseries(
 	}
 
 	// Convert to result format
-	results := make([]map[string]interface{}, 0, len(aggregatedData))
+	results := make([]indexer.TimeseriesDataPoint, 0, len(aggregatedData))
 	for key, data := range aggregatedData {
-		results = append(results, map[string]interface{}{
-			"period":     key.Period,
-			"event_type": key.EventType,
-			"count":      data.Count,
-			"min_block":  data.MinBlock,
-			"max_block":  data.MaxBlock,
+		results = append(results, indexer.TimeseriesDataPoint{
+			Period:    key.Period,
+			EventType: key.EventType,
+			Count:     data.Count,
+			MinBlock:  data.MinBlock,
+			MaxBlock:  data.MaxBlock,
 		})
 	}
 
 	// Sort results by period (string comparison works for ISO 8601 format)
 	sort.Slice(results, func(i, j int) bool {
-		return results[i]["period"].(string) < results[j]["period"].(string) //nolint:forcetypeassert
+		return results[i].Period < results[j].Period
 	})
 
 	return results, nil
 }
 
 // GetMetrics returns performance and processing metrics.
-func (b *BaseIndexer) GetMetrics(ctx context.Context, provider MetadataProvider) (interface{}, error) {
-	metrics := make(map[string]interface{})
-
+func (b *BaseIndexer) GetMetrics(ctx context.Context, provider MetadataProvider) (indexer.MetricsResponse, error) {
 	// Build UNION query for all event tables
 	metadata := provider.InitEventMetadata()
 	unionQuery := BuildUnionQuery(metadata, "block_number")
 	if strings.TrimSpace(unionQuery) == "" {
 		// No event metadata available; return empty metrics without executing invalid SQL.
-		return metrics, nil
+		return indexer.MetricsResponse{}, nil
 	}
 
 	// Calculate processing rate from recent blocks
@@ -384,10 +382,11 @@ func (b *BaseIndexer) GetMetrics(ctx context.Context, provider MetadataProvider)
 		recentBlockCount = 0
 	}
 
+	var eventsPerBlock float64
 	if recentBlockCount > 0 {
-		metrics["events_per_block"] = float64(recentEventsCount) / float64(recentBlockCount)
+		eventsPerBlock = float64(recentEventsCount) / float64(recentBlockCount)
 	} else {
-		metrics["events_per_block"] = 0.0
+		eventsPerBlock = 0.0
 	}
 
 	// Calculate average events per day based on block range
@@ -404,21 +403,24 @@ func (b *BaseIndexer) GetMetrics(ctx context.Context, provider MetadataProvider)
 		totalBlocks = 0
 	}
 
+	var avgEventsPerDay float64
 	if totalBlocks > 0 {
 		estimatedDays := float64(totalBlocks) / BlocksPerDay
 		if estimatedDays > 0 {
-			metrics["avg_events_per_day"] = float64(totalEvents) / estimatedDays
+			avgEventsPerDay = float64(totalEvents) / estimatedDays
 		} else {
-			metrics["avg_events_per_day"] = 0.0
+			avgEventsPerDay = 0.0
 		}
 	} else {
-		metrics["avg_events_per_day"] = 0.0
+		avgEventsPerDay = 0.0
 	}
 
-	metrics["recent_blocks_analyzed"] = recentBlockCount
-	metrics["recent_events_count"] = recentEventsCount
-
-	return metrics, nil
+	return indexer.MetricsResponse{
+		EventsPerBlock:       eventsPerBlock,
+		AvgEventsPerDay:      avgEventsPerDay,
+		RecentBlocksAnalyzed: recentBlockCount,
+		RecentEventsCount:    recentEventsCount,
+	}, nil
 }
 
 // GetType returns the type identifier of the indexer.

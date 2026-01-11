@@ -42,7 +42,7 @@ func (idx *ERC20Indexer) QueryEvents(ctx context.Context, params pkgindexer.Quer
 }
 
 // GetStats returns statistics about the indexed data.
-func (idx *ERC20Indexer) GetStats(ctx context.Context) (any, error) {
+func (idx *ERC20Indexer) GetStats(ctx context.Context) (pkgindexer.StatsResponse, error) {
 	return idx.BaseIndexer.GetStats(ctx, idx)
 }
 
@@ -52,11 +52,11 @@ func (idx *ERC20Indexer) GetEventTypes() []string {
 }
 
 // QueryEventsTimeseries retrieves time-series aggregated event data.
-func (idx *ERC20Indexer) QueryEventsTimeseries(ctx context.Context, params pkgindexer.TimeseriesParams) (interface{}, error) {
+func (idx *ERC20Indexer) QueryEventsTimeseries(ctx context.Context, params pkgindexer.TimeseriesParams) ([]pkgindexer.TimeseriesDataPoint, error) {
 	return idx.BaseIndexer.QueryEventsTimeseries(ctx, idx, params)
 }
 
 // GetMetrics returns performance and processing metrics.
-func (idx *ERC20Indexer) GetMetrics(ctx context.Context) (interface{}, error) {
+func (idx *ERC20Indexer) GetMetrics(ctx context.Context) (pkgindexer.MetricsResponse, error) {
 	return idx.BaseIndexer.GetMetrics(ctx, idx)
 }

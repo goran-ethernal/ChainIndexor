@@ -41,6 +41,12 @@ func NewHandler(registry IndexerRegistry, rpcClient rpc.EthClient, log *logger.L
 }
 
 // ListIndexers returns a list of all registered indexers.
+// @Summary List all indexers
+// @Description Get a list of all registered indexers with their event types and available endpoints
+// @Tags Indexers
+// @Produce json
+// @Success 200 {array} IndexerInfo "List of indexers"
+// @Router /indexers [get]
 func (h *Handler) ListIndexers(w http.ResponseWriter, r *http.Request) {
 	indexers := h.registry.ListAll()
 
@@ -64,6 +70,24 @@ func (h *Handler) ListIndexers(w http.ResponseWriter, r *http.Request) {
 }
 
 // GetEvents retrieves events from a specific indexer.
+// @Summary Get events from an indexer
+// @Description Retrieve events from a specific indexer with optional filtering, pagination, and sorting
+// @Tags Events
+// @Produce json
+// @Param name path string true "Indexer name"
+// @Param event_type query string false "Event type to filter by"
+// @Param limit query int false "Maximum number of events to return" default(100)
+// @Param offset query int false "Number of events to skip" default(0)
+// @Param from_block query integer false "Filter events from this block number"
+// @Param to_block query integer false "Filter events up to this block number"
+// @Param address query string false "Filter by address (contract or participant)"
+// @Param sort_by query string false "Field to sort by"
+// @Param sort_order query string false "Sort order: asc or desc" Enums(asc, desc)
+// @Success 200 {object} EventResponse "List of events with pagination info"
+// @Failure 400 {object} ErrorResponse "Invalid parameters"
+// @Failure 404 {object} ErrorResponse "Indexer not found"
+// @Failure 500 {object} ErrorResponse "Internal server error"
+// @Router /indexers/{name}/events [get]
 func (h *Handler) GetEvents(w http.ResponseWriter, r *http.Request) {
 	indexerName := r.PathValue("name")
 	if indexerName == "" {
@@ -123,6 +147,16 @@ func (h *Handler) GetEvents(w http.ResponseWriter, r *http.Request) {
 }
 
 // GetStats retrieves statistics for a specific indexer.
+// @Summary Get indexer statistics
+// @Description Retrieve statistics and status information for a specific indexer
+// @Tags Stats
+// @Produce json
+// @Param name path string true "Indexer name"
+// @Success 200 {object} StatsResponse "Indexer statistics"
+// @Failure 400 {object} ErrorResponse "Invalid parameters"
+// @Failure 404 {object} ErrorResponse "Indexer not found"
+// @Failure 500 {object} ErrorResponse "Internal server error"
+// @Router /indexers/{name}/stats [get]
 func (h *Handler) GetStats(w http.ResponseWriter, r *http.Request) {
 	indexerName := r.PathValue("name")
 	if indexerName == "" {
@@ -156,6 +190,20 @@ func (h *Handler) GetStats(w http.ResponseWriter, r *http.Request) {
 }
 
 // GetEventsTimeseries retrieves time-series aggregated event data.
+// @Summary Get timeseries event data
+// @Description Retrieve events aggregated by time periods (hour, day, or week) with event counts
+// @Tags Analytics
+// @Produce json
+// @Param name path string true "Indexer name"
+// @Param interval query string false "Time period interval" Enums(hour, day, week) default(day)
+// @Param event_type query string false "Filter by specific event type"
+// @Param from_block query integer false "Filter events from this block number"
+// @Param to_block query integer false "Filter events up to this block number"
+// @Success 200 {array} TimeseriesDataPoint "Timeseries data points with event counts"
+// @Failure 400 {object} ErrorResponse "Invalid parameters"
+// @Failure 404 {object} ErrorResponse "Indexer not found"
+// @Failure 500 {object} ErrorResponse "Internal server error"
+// @Router /indexers/{name}/events/timeseries [get]
 func (h *Handler) GetEventsTimeseries(w http.ResponseWriter, r *http.Request) {
 	indexerName := r.PathValue("name")
 	if indexerName == "" {
@@ -199,6 +247,16 @@ func (h *Handler) GetEventsTimeseries(w http.ResponseWriter, r *http.Request) {
 }
 
 // GetMetrics retrieves performance and processing metrics.
+// @Summary Get indexer metrics
+// @Description Retrieve performance and processing metrics for a specific indexer
+// @Tags Metrics
+// @Produce json
+// @Param name path string true "Indexer name"
+// @Success 200 {object} MetricsResponse "Indexer metrics"
+// @Failure 400 {object} ErrorResponse "Invalid parameters"
+// @Failure 404 {object} ErrorResponse "Indexer not found"
+// @Failure 500 {object} ErrorResponse "Internal server error"
+// @Router /indexers/{name}/metrics [get]
 func (h *Handler) GetMetrics(w http.ResponseWriter, r *http.Request) {
 	indexerName := r.PathValue("name")
 	if indexerName == "" {
@@ -232,6 +290,12 @@ func (h *Handler) GetMetrics(w http.ResponseWriter, r *http.Request) {
 }
 
 // Health returns the health status of the API and all indexers.
+// @Summary Health check
+// @Description Check the health status of the API and all registered indexers
+// @Tags Health
+// @Produce json
+// @Success 200 {object} HealthResponse "API and indexer health status"
+// @Router /health [get]
 func (h *Handler) Health(w http.ResponseWriter, r *http.Request) {
 	indexers := h.registry.ListAll()
 
@@ -246,13 +310,10 @@ func (h *Handler) Health(w http.ResponseWriter, r *http.Request) {
 			}
 
 			if err == nil {
-				if statsMap, ok := stats.(map[string]any); ok {
-					if latestBlock, ok := statsMap["latest_block"].(uint64); ok {
-						status.LatestBlock = latestBlock
-					}
-					if eventCount, ok := statsMap["event_count"].(int64); ok {
-						status.EventCount = eventCount
-					}
+				status.LatestBlock = stats.LatestBlock
+				// Sum all event counts
+				for _, count := range stats.EventCounts {
+					status.EventCount += count
 				}
 			}
 

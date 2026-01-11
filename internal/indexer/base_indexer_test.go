@@ -207,15 +207,11 @@ func TestGetStats(t *testing.T) {
 	stats, err := bi.GetStats(ctx, provider)
 	require.NoError(t, err)
 
-	statsMap, ok := stats.(map[string]interface{})
-	require.True(t, ok, "stats should be a map[string]interface{}")
+	require.Equal(t, int64(4), stats.TotalEvents)
+	require.Equal(t, uint64(100), stats.EarliestBlock)
+	require.Equal(t, uint64(102), stats.LatestBlock)
 
-	require.Equal(t, int64(4), statsMap["total_events"].(int64))       //nolint:forcetypeassert
-	require.Equal(t, uint64(100), statsMap["earliest_block"].(uint64)) //nolint:forcetypeassert
-	require.Equal(t, uint64(102), statsMap["latest_block"].(uint64))   //nolint:forcetypeassert
-
-	eventCounts, ok := statsMap["event_counts"].(map[string]int64)
-	require.True(t, ok, "event_counts should be a map[string]int64")
+	eventCounts := stats.EventCounts
 	require.Equal(t, int64(3), eventCounts["Transfer"])
 	require.Equal(t, int64(1), eventCounts["Approval"])
 }
@@ -239,15 +235,11 @@ func TestGetStatsEmptyTables(t *testing.T) {
 	stats, err := bi.GetStats(ctx, provider)
 	require.NoError(t, err)
 
-	statsMap, ok := stats.(map[string]interface{})
-	require.True(t, ok, "stats should be a map[string]interface{}")
+	require.Equal(t, int64(0), stats.TotalEvents)
+	require.Equal(t, uint64(0), stats.EarliestBlock)
+	require.Equal(t, uint64(0), stats.LatestBlock)
 
-	require.Equal(t, int64(0), statsMap["total_events"].(int64))     //nolint:forcetypeassert
-	require.Equal(t, uint64(0), statsMap["earliest_block"].(uint64)) //nolint:forcetypeassert
-	require.Equal(t, uint64(0), statsMap["latest_block"].(uint64))   //nolint:forcetypeassert
-
-	eventCounts, ok := statsMap["event_counts"].(map[string]int64)
-	require.True(t, ok, "event_counts should be a map[string]int64")
+	eventCounts := stats.EventCounts
 	require.Equal(t, int64(0), eventCounts["Transfer"])
 	require.Equal(t, int64(0), eventCounts["Approval"])
 }

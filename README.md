@@ -760,70 +760,259 @@ api:
 
 ### API Endpoints
 
-Once enabled, the following endpoints are available:
+Once enabled, the following endpoints are available. For interactive exploration and detailed schema information, visit the **[Swagger UI Documentation](http://localhost:8080/swagger/index.html)** once the API is running.
 
-#### Health Check
+#### 1. Health Check
 
-```bash
-GET /health
+**Endpoint:** `GET /health`
+
+**Description:** Check the health status of the API and all registered indexers.
+
+**Response:**
+
+```json
+{
+  "timestamp": "2024-01-15T10:30:00Z",
+  "uptime": "1h30m45s",
+  "status": "healthy",
+  "indexers": [
+    {
+      "name": "erc20",
+      "type": "erc20",
+      "healthy": true,
+      "latest_block": 19234567,
+      "event_count": 1250000
+    }
+  ]
+}
 ```
 
-Returns server health status and uptime.
-
-#### List All Indexers
+**Example:**
 
 ```bash
-GET /api/v1/indexers
+curl "http://localhost:8080/health"
 ```
 
-Returns a list of all registered indexers with their names.
+---
 
-#### Query Events
+#### 2. List All Indexers
+
+**Endpoint:** `GET /indexers`
+
+**Description:** Get a list of all registered indexers with their event types and available endpoints.
+
+**Response:**
+
+```json
+[
+  {
+    "type": "erc20",
+    "name": "erc20",
+    "event_types": ["Transfer", "Approval"],
+    "endpoints": [
+      "/api/v1/indexers/erc20/events",
+      "/api/v1/indexers/erc20/stats"
+    ]
+  }
+]
+```
+
+**Example:**
 
 ```bash
-GET /api/v1/indexers/{name}/events
+curl "http://localhost:8080/indexers"
 ```
 
-Query parameters:
+---
 
-- `limit` (int, default: 100, max: 1000): Number of events to return
-- `offset` (int, default: 0): Offset for pagination
+#### 3. Query Events
+
+**Endpoint:** `GET /indexers/{name}/events`
+
+**Description:** Retrieve events from a specific indexer with optional filtering, pagination, and sorting.
+
+**Path Parameters:**
+
+- `name` (string, required): Indexer name (e.g., "erc20")
+
+**Query Parameters:**
+
+- `limit` (int, default: 100, max: 1000): Maximum number of events to return
+- `offset` (int, default: 0): Number of events to skip for pagination
 - `from_block` (uint64, optional): Filter events from this block number
 - `to_block` (uint64, optional): Filter events up to this block number
-- `address` (string, optional): Filter by contract address (lowercase hex with 0x prefix)
+- `address` (string, optional): Filter by contract or participant address (lowercase hex with 0x prefix)
 - `event_type` (string, optional): Filter by event type (e.g., "Transfer", "Approval")
+- `sort_by` (string, optional): Field to sort by
+- `sort_order` (string, optional): Sort order: "asc" or "desc"
 
-Example:
+**Response:**
+
+```json
+{
+  "events": [
+    {
+      "block_number": 19234567,
+      "transaction_hash": "0xabc...",
+      "log_index": 0,
+      "address": "0x123...",
+      "event_type": "Transfer",
+      "event_data": {
+        "from": "0x...",
+        "to": "0x...",
+        "value": "1000000000000000000"
+      },
+      "block_timestamp": 1705315800
+    }
+  ],
+  "pagination": {
+    "total": 5000,
+    "limit": 50,
+    "offset": 0,
+    "has_more": true
+  }
+}
+```
+
+**Examples:**
 
 ```bash
 # Get latest 50 Transfer events
-curl "http://localhost:8080/api/v1/indexers/erc20/events?event_type=Transfer&limit=50"
+curl "http://localhost:8080/indexers/erc20/events?event_type=Transfer&limit=50"
 
 # Get events for specific address with pagination
-curl "http://localhost:8080/api/v1/indexers/erc20/events?address=0x123...&limit=100&offset=100"
+curl "http://localhost:8080/indexers/erc20/events?address=0x123...&limit=100&offset=100"
 
 # Get events in block range
-curl "http://localhost:8080/api/v1/indexers/erc20/events?from_block=1000000&to_block=1001000"
+curl "http://localhost:8080/indexers/erc20/events?from_block=19000000&to_block=19100000"
+
+# Get events sorted by block number in descending order
+curl "http://localhost:8080/indexers/erc20/events?limit=50&sort_by=block_number&sort_order=desc"
 ```
 
-#### Get Indexer Statistics
+---
+
+#### 4. Get Indexer Statistics
+
+**Endpoint:** `GET /indexers/{name}/stats`
+
+**Description:** Retrieve statistics and status information for a specific indexer.
+
+**Path Parameters:**
+
+- `name` (string, required): Indexer name (e.g., "erc20")
+
+**Response:**
+
+```json
+{
+  "total_events": 1250000,
+  "event_counts": {
+    "Transfer": 1000000,
+    "Approval": 250000
+  },
+  "earliest_block": 12373391,
+  "latest_block": 19234567
+}
+```
+
+**Example:**
 
 ```bash
-GET /api/v1/indexers/{name}/stats
+curl "http://localhost:8080/indexers/erc20/stats"
 ```
 
-Returns statistics including:
+---
 
-- Total events indexed
-- Latest block processed
-- Event counts by type
-- Last update timestamp
+#### 5. Get Timeseries Event Data
 
-Example:
+**Endpoint:** `GET /indexers/{name}/events/timeseries`
+
+**Description:** Retrieve events aggregated by time periods (hour, day, or week) with event counts for time-series analysis.
+
+**Path Parameters:**
+
+- `name` (string, required): Indexer name (e.g., "erc20")
+
+**Query Parameters:**
+
+- `interval` (string, optional, default: "day"): Time period interval - "hour", "day", or "week"
+- `event_type` (string, optional): Filter by specific event type
+- `from_block` (uint64, optional): Filter events from this block number
+- `to_block` (uint64, optional): Filter events up to this block number
+
+**Response:**
+
+```json
+[
+  {
+    "period": "2024-01-15T00:00:00Z",
+    "event_type": "Transfer",
+    "count": 5000,
+    "min_block": 19230000,
+    "max_block": 19234567
+  },
+  {
+    "period": "2024-01-14T00:00:00Z",
+    "event_type": "Transfer",
+    "count": 4850,
+    "min_block": 19225000,
+    "max_block": 19229999
+  }
+]
+```
+
+**Examples:**
 
 ```bash
-curl "http://localhost:8080/api/v1/indexers/erc20/stats"
+# Get daily timeseries data
+curl "http://localhost:8080/indexers/erc20/events/timeseries?interval=day"
+
+# Get hourly timeseries data for Transfer events
+curl "http://localhost:8080/indexers/erc20/events/timeseries?interval=hour&event_type=Transfer"
+
+# Get weekly data for a specific block range
+curl "http://localhost:8080/indexers/erc20/events/timeseries?interval=week&from_block=19000000&to_block=19234567"
 ```
+
+---
+
+#### 6. Get Indexer Metrics
+
+**Endpoint:** `GET /indexers/{name}/metrics`
+
+**Description:** Retrieve performance and processing metrics for a specific indexer.
+
+**Path Parameters:**
+
+- `name` (string, required): Indexer name (e.g., "erc20")
+
+**Response:**
+
+```json
+{
+  "events_per_block": 12.5,
+  "avg_events_per_day": 150000.25,
+  "recent_blocks_analyzed": 1000,
+  "recent_events_count": 12500
+}
+```
+
+**Example:**
+
+```bash
+curl "http://localhost:8080/indexers/erc20/metrics"
+```
+
+---
+
+#### Swagger Documentation
+
+For interactive API documentation with full schema information, request examples, and the ability to test endpoints directly:
+
+1. Start the server with API enabled
+2. Visit: **[http://localhost:8080/swagger/index.html](http://localhost:8080/swagger/index.html)**
+3. All endpoints are documented with detailed parameters, response schemas, and example values
 
 ### Response Format
 
