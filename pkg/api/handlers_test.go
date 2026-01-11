@@ -774,7 +774,7 @@ func TestHandler_GetStats(t *testing.T) {
 			indexerName: "test-indexer",
 			setupMocks: func(registry *apimocks.IndexerRegistry, idx *mockQueryableIndexer) {
 				registry.EXPECT().GetByName("test-indexer").Return(idx)
-				idx.Queryable.EXPECT().GetStats(mock.Anything).Return(nil, errors.New("database error"))
+				idx.Queryable.EXPECT().GetStats(mock.Anything).Return(indexer.StatsResponse{}, errors.New("database error"))
 			},
 			expectedStatus: http.StatusInternalServerError,
 			validate: func(t *testing.T, response []byte, code int) {
@@ -792,10 +792,10 @@ func TestHandler_GetStats(t *testing.T) {
 			setupMocks: func(registry *apimocks.IndexerRegistry, idx *mockQueryableIndexer) {
 				registry.EXPECT().GetByName("test-indexer").Return(idx)
 
-				stats := map[string]any{
-					"event_count":  int64(1234),
-					"latest_block": uint64(5000),
-					"first_block":  uint64(1000),
+				stats := indexer.StatsResponse{
+					TotalEvents:   int64(1234),
+					LatestBlock:   uint64(5000),
+					EarliestBlock: uint64(1000),
 				}
 
 				idx.Queryable.EXPECT().GetStats(mock.Anything).Return(stats, nil)
@@ -804,12 +804,12 @@ func TestHandler_GetStats(t *testing.T) {
 			validate: func(t *testing.T, response []byte, code int) {
 				t.Helper()
 
-				var stats map[string]any
+				var stats indexer.StatsResponse
 				err := json.Unmarshal(response, &stats)
 				require.NoError(t, err)
-				require.Equal(t, float64(1234), stats["event_count"])
-				require.Equal(t, float64(5000), stats["latest_block"])
-				require.Equal(t, float64(1000), stats["first_block"])
+				require.Equal(t, int64(1234), stats.TotalEvents)
+				require.Equal(t, uint64(5000), stats.LatestBlock)
+				require.Equal(t, uint64(1000), stats.EarliestBlock)
 			},
 		},
 	}
@@ -869,9 +869,9 @@ func TestHandler_Health(t *testing.T) {
 				mockIdx := newMockQueryableIndexer(t)
 				mockIdx.Indexer.EXPECT().GetName().Return("test-indexer")
 				mockIdx.Indexer.EXPECT().GetType().Return("ERC20")
-				mockIdx.Queryable.EXPECT().GetStats(mock.Anything).Return(map[string]any{
-					"latest_block": uint64(1000),
-					"event_count":  int64(500),
+				mockIdx.Queryable.EXPECT().GetStats(mock.Anything).Return(indexer.StatsResponse{
+					LatestBlock: uint64(1000),
+					EventCounts: map[string]int64{"Transfer": 500},
 				}, nil)
 
 				registry.EXPECT().ListAll().Return([]indexer.Indexer{mockIdx})
@@ -899,7 +899,7 @@ func TestHandler_Health(t *testing.T) {
 				mockIdx := newMockQueryableIndexer(t)
 				mockIdx.Indexer.EXPECT().GetName().Return("test-indexer")
 				mockIdx.Indexer.EXPECT().GetType().Return("ERC20")
-				mockIdx.Queryable.EXPECT().GetStats(mock.Anything).Return(nil, errors.New("database error"))
+				mockIdx.Queryable.EXPECT().GetStats(mock.Anything).Return(indexer.StatsResponse{}, errors.New("database error"))
 
 				registry.EXPECT().ListAll().Return([]indexer.Indexer{mockIdx})
 			},
@@ -925,15 +925,15 @@ func TestHandler_Health(t *testing.T) {
 				mockIdx1 := newMockQueryableIndexer(t)
 				mockIdx1.Indexer.EXPECT().GetName().Return("healthy-indexer")
 				mockIdx1.Indexer.EXPECT().GetType().Return("ERC20")
-				mockIdx1.Queryable.EXPECT().GetStats(mock.Anything).Return(map[string]any{
-					"latest_block": uint64(2000),
-					"event_count":  int64(1000),
+				mockIdx1.Queryable.EXPECT().GetStats(mock.Anything).Return(indexer.StatsResponse{
+					LatestBlock: uint64(2000),
+					EventCounts: make(map[string]int64),
 				}, nil)
 
 				mockIdx2 := newMockQueryableIndexer(t)
 				mockIdx2.Indexer.EXPECT().GetName().Return("unhealthy-indexer")
 				mockIdx2.Indexer.EXPECT().GetType().Return("ERC721")
-				mockIdx2.Queryable.EXPECT().GetStats(mock.Anything).Return(nil, errors.New("error"))
+				mockIdx2.Queryable.EXPECT().GetStats(mock.Anything).Return(indexer.StatsResponse{}, errors.New("error"))
 
 				registry.EXPECT().ListAll().Return([]indexer.Indexer{mockIdx1, mockIdx2})
 			},
@@ -961,7 +961,9 @@ func TestHandler_Health(t *testing.T) {
 				mockQueryableIdx := newMockQueryableIndexer(t)
 				mockQueryableIdx.Indexer.EXPECT().GetName().Return("queryable")
 				mockQueryableIdx.Indexer.EXPECT().GetType().Return("ERC20")
-				mockQueryableIdx.Queryable.EXPECT().GetStats(mock.Anything).Return(map[string]any{}, nil)
+				mockQueryableIdx.Queryable.EXPECT().GetStats(mock.Anything).Return(indexer.StatsResponse{
+					EventCounts: make(map[string]int64),
+				}, nil)
 
 				mockNonQueryableIdx := indexermocks.NewIndexer(t)
 

@@ -66,6 +66,6 @@ type TimeseriesDataPoint struct {
 type MetricsResponse struct {
 	EventsPerBlock       float64 `json:"events_per_block" example:"12.5" description:"Average events per block"`
 	AvgEventsPerDay      float64 `json:"avg_events_per_day" example:"1250.5" description:"Average events per day"`
-	RecentBlocksAnalyzed uint64  `json:"recent_blocks_analyzed" example:"1000" description:"Number of recent blocks analyzed"`
+	RecentBlocksAnalyzed uint64  `json:"recent_blocks_analyzed" example:"1000" description:"Number of recent blocks analyzed"` //nolint:lll
 	RecentEventsCount    int64   `json:"recent_events_count" example:"12500" description:"Event count in recent blocks"`
 }

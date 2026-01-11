@@ -6,12 +6,11 @@ import (
 	"net/http"
 	"time"
 
-	httpSwagger "github.com/swaggo/http-swagger"
-
 	"github.com/goran-ethernal/ChainIndexor/internal/logger"
 	"github.com/goran-ethernal/ChainIndexor/pkg/api/docs"
 	"github.com/goran-ethernal/ChainIndexor/pkg/config"
 	"github.com/goran-ethernal/ChainIndexor/pkg/rpc"
+	httpSwagger "github.com/swaggo/http-swagger"
 )
 
 // Ensure docs are initialized

@@ -55,6 +55,7 @@ type Queryable interface {
 	QueryEventsTimeseries(ctx context.Context, params TimeseriesParams) ([]TimeseriesDataPoint, error)
 
 	// GetMetrics returns performance and processing metrics.
-	// Returns a MetricsResponse with events_per_block, avg_events_per_day, recent_blocks_analyzed, and recent_events_count.
+	// Returns a MetricsResponse with events_per_block, avg_events_per_day,
+	// recent_blocks_analyzed, and recent_events_count.
 	GetMetrics(ctx context.Context) (MetricsResponse, error)
 }
