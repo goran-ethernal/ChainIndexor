@@ -70,24 +70,22 @@ func (_c *Queryable_GetEventTypes_Call) RunAndReturn(run func() []string) *Query
 }
 
 // GetMetrics provides a mock function with given fields: ctx
-func (_m *Queryable) GetMetrics(ctx context.Context) (interface{}, error) {
+func (_m *Queryable) GetMetrics(ctx context.Context) (indexer.MetricsResponse, error) {
 	ret := _m.Called(ctx)
 
 	if len(ret) == 0 {
 		panic("no return value specified for GetMetrics")
 	}
 
-	var r0 interface{}
+	var r0 indexer.MetricsResponse
 	var r1 error
-	if rf, ok := ret.Get(0).(func(context.Context) (interface{}, error)); ok {
+	if rf, ok := ret.Get(0).(func(context.Context) (indexer.MetricsResponse, error)); ok {
 		return rf(ctx)
 	}
-	if rf, ok := ret.Get(0).(func(context.Context) interface{}); ok {
+	if rf, ok := ret.Get(0).(func(context.Context) indexer.MetricsResponse); ok {
 		r0 = rf(ctx)
 	} else {
-		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(interface{})
-		}
+		r0 = ret.Get(0).(indexer.MetricsResponse)
 	}
 
 	if rf, ok := ret.Get(1).(func(context.Context) error); ok {
@@ -117,35 +115,33 @@ func (_c *Queryable_GetMetrics_Call) Run(run func(ctx context.Context)) *Queryab
 	return _c
 }
 
-func (_c *Queryable_GetMetrics_Call) Return(_a0 interface{}, _a1 error) *Queryable_GetMetrics_Call {
+func (_c *Queryable_GetMetrics_Call) Return(_a0 indexer.MetricsResponse, _a1 error) *Queryable_GetMetrics_Call {
 	_c.Call.Return(_a0, _a1)
 	return _c
 }
 
-func (_c *Queryable_GetMetrics_Call) RunAndReturn(run func(context.Context) (interface{}, error)) *Queryable_GetMetrics_Call {
+func (_c *Queryable_GetMetrics_Call) RunAndReturn(run func(context.Context) (indexer.MetricsResponse, error)) *Queryable_GetMetrics_Call {
 	_c.Call.Return(run)
 	return _c
 }
 
 // GetStats provides a mock function with given fields: ctx
-func (_m *Queryable) GetStats(ctx context.Context) (interface{}, error) {
+func (_m *Queryable) GetStats(ctx context.Context) (indexer.StatsResponse, error) {
 	ret := _m.Called(ctx)
 
 	if len(ret) == 0 {
 		panic("no return value specified for GetStats")
 	}
 
-	var r0 interface{}
+	var r0 indexer.StatsResponse
 	var r1 error
-	if rf, ok := ret.Get(0).(func(context.Context) (interface{}, error)); ok {
+	if rf, ok := ret.Get(0).(func(context.Context) (indexer.StatsResponse, error)); ok {
 		return rf(ctx)
 	}
-	if rf, ok := ret.Get(0).(func(context.Context) interface{}); ok {
+	if rf, ok := ret.Get(0).(func(context.Context) indexer.StatsResponse); ok {
 		r0 = rf(ctx)
 	} else {
-		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(interface{})
-		}
+		r0 = ret.Get(0).(indexer.StatsResponse)
 	}
 
 	if rf, ok := ret.Get(1).(func(context.Context) error); ok {
@@ -175,12 +171,12 @@ func (_c *Queryable_GetStats_Call) Run(run func(ctx context.Context)) *Queryable
 	return _c
 }
 
-func (_c *Queryable_GetStats_Call) Return(_a0 interface{}, _a1 error) *Queryable_GetStats_Call {
+func (_c *Queryable_GetStats_Call) Return(_a0 indexer.StatsResponse, _a1 error) *Queryable_GetStats_Call {
 	_c.Call.Return(_a0, _a1)
 	return _c
 }
 
-func (_c *Queryable_GetStats_Call) RunAndReturn(run func(context.Context) (interface{}, error)) *Queryable_GetStats_Call {
+func (_c *Queryable_GetStats_Call) RunAndReturn(run func(context.Context) (indexer.StatsResponse, error)) *Queryable_GetStats_Call {
 	_c.Call.Return(run)
 	return _c
 }
@@ -252,23 +248,23 @@ func (_c *Queryable_QueryEvents_Call) RunAndReturn(run func(context.Context, ind
 }
 
 // QueryEventsTimeseries provides a mock function with given fields: ctx, params
-func (_m *Queryable) QueryEventsTimeseries(ctx context.Context, params indexer.TimeseriesParams) (interface{}, error) {
+func (_m *Queryable) QueryEventsTimeseries(ctx context.Context, params indexer.TimeseriesParams) ([]indexer.TimeseriesDataPoint, error) {
 	ret := _m.Called(ctx, params)
 
 	if len(ret) == 0 {
 		panic("no return value specified for QueryEventsTimeseries")
 	}
 
-	var r0 interface{}
+	var r0 []indexer.TimeseriesDataPoint
 	var r1 error
-	if rf, ok := ret.Get(0).(func(context.Context, indexer.TimeseriesParams) (interface{}, error)); ok {
+	if rf, ok := ret.Get(0).(func(context.Context, indexer.TimeseriesParams) ([]indexer.TimeseriesDataPoint, error)); ok {
 		return rf(ctx, params)
 	}
-	if rf, ok := ret.Get(0).(func(context.Context, indexer.TimeseriesParams) interface{}); ok {
+	if rf, ok := ret.Get(0).(func(context.Context, indexer.TimeseriesParams) []indexer.TimeseriesDataPoint); ok {
 		r0 = rf(ctx, params)
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(interface{})
+			r0 = ret.Get(0).([]indexer.TimeseriesDataPoint)
 		}
 	}
 
@@ -300,12 +296,12 @@ func (_c *Queryable_QueryEventsTimeseries_Call) Run(run func(ctx context.Context
 	return _c
 }
 
-func (_c *Queryable_QueryEventsTimeseries_Call) Return(_a0 interface{}, _a1 error) *Queryable_QueryEventsTimeseries_Call {
+func (_c *Queryable_QueryEventsTimeseries_Call) Return(_a0 []indexer.TimeseriesDataPoint, _a1 error) *Queryable_QueryEventsTimeseries_Call {
 	_c.Call.Return(_a0, _a1)
 	return _c
 }
 
-func (_c *Queryable_QueryEventsTimeseries_Call) RunAndReturn(run func(context.Context, indexer.TimeseriesParams) (interface{}, error)) *Queryable_QueryEventsTimeseries_Call {
+func (_c *Queryable_QueryEventsTimeseries_Call) RunAndReturn(run func(context.Context, indexer.TimeseriesParams) ([]indexer.TimeseriesDataPoint, error)) *Queryable_QueryEventsTimeseries_Call {
 	_c.Call.Return(run)
 	return _c
 }

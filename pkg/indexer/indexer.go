@@ -44,59 +44,18 @@ type Queryable interface {
 	QueryEvents(ctx context.Context, params QueryParams) (interface{}, int, error)
 
 	// GetStats returns statistics about the indexed data.
-	// Returns a map of stat names to values.
-	GetStats(ctx context.Context) (interface{}, error)
+	// Returns a StatsResponse with total_events, event_counts, earliest_block, and latest_block.
+	GetStats(ctx context.Context) (StatsResponse, error)
 
 	// GetEventTypes returns the list of event type names this indexer handles.
 	GetEventTypes() []string
 
 	// QueryEventsTimeseries retrieves time-series aggregated event data.
-	// Returns aggregated data points with timestamps and counts.
-	QueryEventsTimeseries(ctx context.Context, params TimeseriesParams) (interface{}, error)
+	// Returns an array of TimeseriesDataPoint with period, eventType, count, minBlock, and maxBlock.
+	QueryEventsTimeseries(ctx context.Context, params TimeseriesParams) ([]TimeseriesDataPoint, error)
 
 	// GetMetrics returns performance and processing metrics.
-	// Returns current processing state and performance indicators.
-	GetMetrics(ctx context.Context) (interface{}, error)
-}
-
-// QueryParams represents common query parameters for event retrieval.
-type QueryParams struct {
-	// Event type to query (e.g., "Transfer", "Approval")
-	EventType string
-
-	// Pagination
-	Limit  int
-	Offset int
-
-	// Block range filtering
-	FromBlock *uint64
-	ToBlock   *uint64
-
-	// Address filtering
-	Address string
-
-	// Sorting
-	SortBy    string
-	SortOrder string // "asc" or "desc"
-}
-
-func NewDefaultQueryParams() *QueryParams {
-	return &QueryParams{
-		Limit:     defaultPageLimit,
-		Offset:    0,
-		SortOrder: "desc",
-	}
-}
-
-// TimeseriesParams represents parameters for time-series queries.
-type TimeseriesParams struct {
-	// Interval for aggregation: "hour", "day", "week"
-	Interval string
-
-	// Block range filtering
-	FromBlock *uint64
-	ToBlock   *uint64
-
-	// Event type filtering
-	EventType string
+	// Returns a MetricsResponse with events_per_block, avg_events_per_day,
+	// recent_blocks_analyzed, and recent_events_count.
+	GetMetrics(ctx context.Context) (MetricsResponse, error)
 }

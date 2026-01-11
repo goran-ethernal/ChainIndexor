@@ -72,6 +72,85 @@ orchestrator.RegisterIndexer(indexer)
 go run ./cmd/indexer
 {{"`"}}{{"`"}}{{"`"}}
 
+## REST API Endpoints
+
+Once you implement the {{"`"}}Queryable{{"`"}} interface and enable the API in your configuration, the following endpoints become available:
+
+### GET /indexers
+
+List all registered indexers.
+
+{{"`"}}{{"`"}}{{"`"}}bash
+curl http://localhost:8080/indexers
+{{"`"}}{{"`"}}{{"`"}}
+
+### GET /indexers/{{.Package}}/events
+
+Query {{.Name}} events with filtering and pagination.
+
+**Query Parameters:**
+- {{"`"}}limit{{"`"}} (int, default: 100, max: 1000)
+- {{"`"}}offset{{"`"}} (int, default: 0)
+- {{"`"}}from_block{{"`"}} (uint64, optional)
+- {{"`"}}to_block{{"`"}} (uint64, optional)
+- {{"`"}}address{{"`"}} (string, optional)
+- {{"`"}}event_type{{"`"}} (string, optional)
+
+**Example:**
+
+{{"`"}}{{"`"}}{{"`"}}bash
+# Get latest 50 events
+curl "http://localhost:8080/indexers/{{.Package}}/events?limit=50"
+
+# Query with filters
+curl "http://localhost:8080/indexers/{{.Package}}/events?event_type=Transfer&limit=50"
+{{"`"}}{{"`"}}{{"`"}}
+
+### GET /indexers/{{.Package}}/stats
+
+Get indexer statistics including total events and event counts by type.
+
+{{"`"}}{{"`"}}{{"`"}}bash
+curl "http://localhost:8080/indexers/{{.Package}}/stats"
+{{"`"}}{{"`"}}{{"`"}}
+
+### GET /indexers/{{.Package}}/events/timeseries
+
+Get time-series aggregated event data for analytics.
+
+**Query Parameters:**
+- {{"`"}}interval{{"`"}} (string, optional: "hour", "day", "week", default: "day")
+- {{"`"}}event_type{{"`"}} (string, optional)
+- {{"`"}}from_block{{"`"}} (uint64, optional)
+- {{"`"}}to_block{{"`"}} (uint64, optional)
+
+{{"`"}}{{"`"}}{{"`"}}bash
+curl "http://localhost:8080/indexers/{{.Package}}/events/timeseries?interval=day"
+{{"`"}}{{"`"}}{{"`"}}
+
+### GET /indexers/{{.Package}}/metrics
+
+Get performance and processing metrics.
+
+{{"`"}}{{"`"}}{{"`"}}bash
+curl "http://localhost:8080/indexers/{{.Package}}/metrics"
+{{"`"}}{{"`"}}{{"`"}}
+
+### GET /health
+
+Check API and indexer health status.
+
+{{"`"}}{{"`"}}{{"`"}}bash
+curl "http://localhost:8080/health"
+{{"`"}}{{"`"}}{{"`"}}
+
+### Swagger UI
+
+For interactive API documentation, visit:
+[http://localhost:8080/swagger/index.html](http://localhost:8080/swagger/index.html)
+
+See the [Code Generator Documentation](../../internal/codegen/README.md#api-integration-optional) for instructions on implementing the {{"`"}}Queryable{{"`"}} interface.
+
 ## Generated Files
 
 - {{"`"}}indexer.go{{"`"}} - Main indexer implementation

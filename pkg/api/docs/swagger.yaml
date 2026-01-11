@@ -1,0 +1,353 @@
+definitions:
+  api.ErrorResponse:
+    description: Standard error response format
+    properties:
+      code:
+        example: 400
+        type: integer
+      error:
+        type: string
+      message:
+        type: string
+    type: object
+  api.EventResponse:
+    description: Response containing events and pagination information
+    properties:
+      events: {}
+      pagination:
+        $ref: '#/definitions/api.PaginationResult'
+    type: object
+  api.HealthResponse:
+    description: Health status of the API and all indexers
+    properties:
+      indexers:
+        items:
+          $ref: '#/definitions/api.IndexerStatus'
+        type: array
+      status:
+        example: healthy
+        type: string
+      timestamp:
+        type: string
+    type: object
+  api.IndexerInfo:
+    description: Metadata about an available indexer
+    properties:
+      endpoints:
+        items:
+          type: string
+        type: array
+      event_types:
+        items:
+          type: string
+        type: array
+      name:
+        type: string
+      type:
+        type: string
+    type: object
+  api.IndexerStatus:
+    description: Status information for a single indexer
+    properties:
+      event_count:
+        example: 150000
+        type: integer
+      healthy:
+        example: true
+        type: boolean
+      latest_block:
+        example: 19500000
+        type: integer
+      name:
+        type: string
+      type:
+        type: string
+    type: object
+  api.MetricsResponse:
+    description: Performance metrics for an indexer
+    properties:
+      avg_events_per_day:
+        example: 1250.5
+        type: number
+      events_per_block:
+        example: 12.5
+        type: number
+      recent_blocks_analyzed:
+        example: 1000
+        type: integer
+      recent_events_count:
+        example: 12500
+        type: integer
+    type: object
+  api.PaginationResult:
+    description: Pagination information for paginated responses
+    properties:
+      has_more:
+        example: true
+        type: boolean
+      limit:
+        example: 100
+        type: integer
+      offset:
+        example: 0
+        type: integer
+      total:
+        example: 1000
+        type: integer
+    type: object
+  api.StatsResponse:
+    description: Statistics and status information for an indexer
+    properties:
+      earliest_block:
+        example: 19000000
+        type: integer
+      event_counts:
+        additionalProperties:
+          format: int64
+          type: integer
+        type: object
+      latest_block:
+        example: 19500000
+        type: integer
+      total_events:
+        example: 150000
+        type: integer
+    type: object
+  api.TimeseriesDataPoint:
+    description: A data point in a timeseries response
+    properties:
+      count:
+        example: 1250
+        type: integer
+      event_type:
+        example: Transfer
+        type: string
+      max_block:
+        example: 19510000
+        type: integer
+      min_block:
+        example: 19500000
+        type: integer
+      period:
+        example: "2024-01-15"
+        type: string
+    type: object
+info:
+  contact: {}
+paths:
+  /health:
+    get:
+      description: Check the health status of the API and all registered indexers
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: API and indexer health status
+          schema:
+            $ref: '#/definitions/api.HealthResponse'
+      summary: Health check
+      tags:
+      - Health
+  /indexers:
+    get:
+      description: Get a list of all registered indexers with their event types and
+        available endpoints
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: List of indexers
+          schema:
+            items:
+              $ref: '#/definitions/api.IndexerInfo'
+            type: array
+      summary: List all indexers
+      tags:
+      - Indexers
+  /indexers/{name}/events:
+    get:
+      description: Retrieve events from a specific indexer with optional filtering,
+        pagination, and sorting
+      parameters:
+      - description: Indexer name
+        in: path
+        name: name
+        required: true
+        type: string
+      - description: Event type to filter by
+        in: query
+        name: event_type
+        type: string
+      - default: 100
+        description: Maximum number of events to return
+        in: query
+        name: limit
+        type: integer
+      - default: 0
+        description: Number of events to skip
+        in: query
+        name: offset
+        type: integer
+      - description: Filter events from this block number
+        in: query
+        name: from_block
+        type: integer
+      - description: Filter events up to this block number
+        in: query
+        name: to_block
+        type: integer
+      - description: Filter by address (contract or participant)
+        in: query
+        name: address
+        type: string
+      - description: Field to sort by
+        in: query
+        name: sort_by
+        type: string
+      - description: 'Sort order: asc or desc'
+        enum:
+        - asc
+        - desc
+        in: query
+        name: sort_order
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: List of events with pagination info
+          schema:
+            $ref: '#/definitions/api.EventResponse'
+        "400":
+          description: Invalid parameters
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "404":
+          description: Indexer not found
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      summary: Get events from an indexer
+      tags:
+      - Events
+  /indexers/{name}/events/timeseries:
+    get:
+      description: Retrieve events aggregated by time periods (hour, day, or week)
+        with event counts
+      parameters:
+      - description: Indexer name
+        in: path
+        name: name
+        required: true
+        type: string
+      - default: day
+        description: Time period interval
+        enum:
+        - hour
+        - day
+        - week
+        in: query
+        name: interval
+        type: string
+      - description: Filter by specific event type
+        in: query
+        name: event_type
+        type: string
+      - description: Filter events from this block number
+        in: query
+        name: from_block
+        type: integer
+      - description: Filter events up to this block number
+        in: query
+        name: to_block
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Timeseries data points with event counts
+          schema:
+            items:
+              $ref: '#/definitions/api.TimeseriesDataPoint'
+            type: array
+        "400":
+          description: Invalid parameters
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "404":
+          description: Indexer not found
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      summary: Get timeseries event data
+      tags:
+      - Analytics
+  /indexers/{name}/metrics:
+    get:
+      description: Retrieve performance and processing metrics for a specific indexer
+      parameters:
+      - description: Indexer name
+        in: path
+        name: name
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Indexer metrics
+          schema:
+            $ref: '#/definitions/api.MetricsResponse'
+        "400":
+          description: Invalid parameters
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "404":
+          description: Indexer not found
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      summary: Get indexer metrics
+      tags:
+      - Metrics
+  /indexers/{name}/stats:
+    get:
+      description: Retrieve statistics and status information for a specific indexer
+      parameters:
+      - description: Indexer name
+        in: path
+        name: name
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Indexer statistics
+          schema:
+            $ref: '#/definitions/api.StatsResponse'
+        "400":
+          description: Invalid parameters
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "404":
+          description: Indexer not found
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      summary: Get indexer statistics
+      tags:
+      - Stats
+swagger: "2.0"

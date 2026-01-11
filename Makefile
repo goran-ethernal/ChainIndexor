@@ -110,3 +110,11 @@ build: check-go ## Build the ChainIndexor binary with built-in indexers
 .PHONY: build-all
 build-all: build-codegen build ## Build all binaries
 	@echo "✅ All binaries built successfully"
+
+.PHONY: docs
+docs: check-go ## Generate Swagger API documentation
+	@echo "Generating Swagger API documentation..."
+	@go run github.com/swaggo/swag/cmd/swag@latest init -g pkg/api/server.go --output ./pkg/api/docs
+	@echo "✅ Swagger documentation generated successfully"
+	@echo "   Access the API docs at: http://localhost:8080/swagger/index.html (when server is running)"
+	@echo "   Spec files: pkg/api/docs/swagger.{json,yaml}"
